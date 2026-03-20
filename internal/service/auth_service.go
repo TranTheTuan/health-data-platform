@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/TranTheTuan/health-data-platform/internal/auth"
@@ -25,26 +26,31 @@ func NewAuthService() AuthService {
 func (s *authService) ExchangeCodeForUser(ctx context.Context, code string) (dto.GoogleUserResponse, error) {
 	token, err := auth.GoogleOAuthConfig.Exchange(ctx, code)
 	if err != nil {
+		slog.Error("OAuth code exchange failed", slog.Any("error", err))
 		return dto.GoogleUserResponse{}, fmt.Errorf("exchange failed: %w", err)
 	}
 
 	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
 	if err != nil {
+		slog.Error("Failed getting user info via HTTP", slog.Any("error", err))
 		return dto.GoogleUserResponse{}, fmt.Errorf("failed getting user info: %w", err)
 	}
 	defer response.Body.Close()
 
 	contents, err := io.ReadAll(response.Body)
 	if err != nil {
+		slog.Error("Failed reading response body", slog.Any("error", err))
 		return dto.GoogleUserResponse{}, fmt.Errorf("failed reading response: %w", err)
 	}
 
 	var user dto.GoogleUserResponse
 	if err := json.Unmarshal(contents, &user); err != nil {
+		slog.Error("Failed parsing user info JSON", slog.Any("error", err))
 		return dto.GoogleUserResponse{}, fmt.Errorf("failed parsing user info: %w", err)
 	}
 
 	if user.ID == "" {
+		slog.Error("Google ID missing from UserInfo response")
 		return dto.GoogleUserResponse{}, errors.New("google ID missing")
 	}
 

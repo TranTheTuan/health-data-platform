@@ -85,8 +85,8 @@ func TestParseFrame(t *testing.T) {
 // TestParseAP00 covers valid and invalid IMEI strings.
 func TestParseAP00(t *testing.T) {
 	tests := []struct {
-		name    string
-		payload string
+		name     string
+		payload  string
 		wantIMEI string
 		wantErr  bool
 	}{
@@ -144,9 +144,9 @@ func TestParseAP00(t *testing.T) {
 // TestBuildReply verifies reply strings for all known commands.
 func TestBuildReply(t *testing.T) {
 	tests := []struct {
-		cmd          string
-		wantPrefix   string
-		wantSuffix   string
+		cmd        string
+		wantPrefix string
+		wantSuffix string
 	}{
 		{CmdLogin, "IWBP00;", "#"},
 		{CmdGPSLoc, "IWBP01", "#"},

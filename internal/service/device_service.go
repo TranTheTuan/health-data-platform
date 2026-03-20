@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -38,11 +39,13 @@ func NewDeviceService(repo repository.DeviceRepository) DeviceService {
 
 func (s *deviceService) RegisterDevice(ctx context.Context, userID string, req dto.RegisterDeviceRequest) (dto.DeviceResponse, error) {
 	if !reIMEI.MatchString(req.IMEI) {
+		slog.Error("Invalid IMEI format attempt", slog.String("imei", req.IMEI), slog.String("user_id", userID))
 		return dto.DeviceResponse{}, ErrInvalidIMEI
 	}
 
 	d, err := s.repo.RegisterDevice(ctx, userID, req.IMEI, req.Name)
 	if err != nil {
+		slog.Error("Device registration failed", slog.String("imei", req.IMEI), slog.Any("error", err))
 		return dto.DeviceResponse{}, err
 	}
 
@@ -52,6 +55,7 @@ func (s *deviceService) RegisterDevice(ctx context.Context, userID string, req d
 func (s *deviceService) ListDevices(ctx context.Context, userID string) ([]dto.DeviceResponse, error) {
 	devices, err := s.repo.ListDevices(ctx, userID)
 	if err != nil {
+		slog.Error("List devices failed", slog.String("user_id", userID), slog.Any("error", err))
 		return nil, err
 	}
 
@@ -64,11 +68,19 @@ func (s *deviceService) ListDevices(ctx context.Context, userID string) ([]dto.D
 
 func (s *deviceService) LookupDeviceByIMEI(ctx context.Context, imei string) (domain.Device, error) {
 	// TCP handler needs the domain model to persist connection state.
-	return s.repo.LookupDeviceByIMEI(ctx, imei)
+	d, err := s.repo.LookupDeviceByIMEI(ctx, imei)
+	if err != nil {
+		slog.Error("Lookup device failed", slog.String("imei", imei), slog.Any("error", err))
+	}
+	return d, err
 }
 
 func (s *deviceService) UpdateLastSeen(ctx context.Context, deviceID string) error {
-	return s.repo.UpdateLastSeen(ctx, deviceID)
+	err := s.repo.UpdateLastSeen(ctx, deviceID)
+	if err != nil {
+		slog.Error("Update last seen failed", slog.String("device_id", deviceID), slog.Any("error", err))
+	}
+	return err
 }
 
 func (s *deviceService) ProcessPacket(ctx context.Context, req dto.IngestPacketRequest) error {
@@ -79,7 +91,11 @@ func (s *deviceService) ProcessPacket(ctx context.Context, req dto.IngestPacketR
 		RawPayload:  req.RawPayload,
 		ParsedData:  req.ParsedData,
 	}
-	return s.repo.InsertPacket(ctx, pkt)
+	err := s.repo.InsertPacket(ctx, pkt)
+	if err != nil {
+		slog.Error("Insert packet failed", slog.String("device_id", req.DeviceID), slog.Any("error", err))
+	}
+	return err
 }
 
 func toDeviceResponse(d domain.Device) dto.DeviceResponse {

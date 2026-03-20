@@ -30,7 +30,7 @@ func (h *AuthHandler) Home(c echo.Context) error {
 
 func (h *AuthHandler) GoogleLogin(c echo.Context) error {
 	// Simple static state for now based on original logic, but ideally use random generator
-	state := "randomstate" 
+	state := "randomstate"
 	cookie := new(http.Cookie)
 	cookie.Name = "oauthstate"
 	cookie.Value = state

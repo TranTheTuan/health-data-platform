@@ -8,6 +8,7 @@ import (
 )
 
 type Config struct {
+	Environment        string
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
@@ -24,6 +25,7 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
+		Environment:        getEnv("ENVIRONMENT", "DEV"),
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
