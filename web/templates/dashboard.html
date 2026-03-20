@@ -1,0 +1,561 @@
+{{template "base.html" .}}
+{{define "title"}}Dashboard | Health Data Platform{{end}}
+
+{{define "head"}}
+<style>
+    .layout {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────── */
+    .sidebar {
+        width: 260px;
+        background: var(--bg-mid);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 24px;
+    }
+
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        font-size: 18px;
+        color: white;
+        margin-bottom: 40px;
+    }
+
+    .brand .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, var(--accent), #2cd4a2);
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+
+    .nav-items {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex-grow: 1;
+    }
+
+    .nav-item {
+        padding: 10px 16px;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        font-weight: 500;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .nav-item:hover {
+        background: var(--surface);
+        color: var(--text);
+    }
+
+    .nav-item.active {
+        background: var(--accent-glow);
+        color: var(--accent);
+    }
+
+    .user-profile {
+        margin-top: auto;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent);
+        font-weight: bold;
+    }
+
+    .email {
+        font-size: 13px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .btn-logout {
+        padding: 8px 0;
+        text-align: center;
+        width: 100%;
+        background: transparent;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .btn-logout:hover {
+        background: var(--surface);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* ── Main Content ─────────────────────────────────── */
+    .main {
+        flex-grow: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+
+    .header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+    }
+
+    h1 {
+        font-size: 24px;
+        font-weight: 600;
+        color: white;
+    }
+
+    .btn-primary {
+        background: var(--accent);
+        color: white;
+        padding: 10px 18px;
+        border-radius: var(--radius-sm);
+        font-weight: 500;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .btn-primary:hover {
+        background: var(--accent-dark);
+    }
+
+    /* ── Add Device Form ──────────────────────────────── */
+    #add-device-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-bottom: 32px;
+        display: none;
+        animation: fadeInDown 0.3s ease;
+    }
+
+    @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .form-row {
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+    }
+
+    .form-group label {
+        font-size: 13px;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    .form-group input {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        color: white;
+        font-size: 14px;
+        transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+        border-color: var(--accent);
+    }
+
+    .form-group input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* ── Device Table/List ────────────────────────────── */
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th {
+        text-align: left;
+        padding: 16px 24px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border);
+        background: rgba(0,0,0,0.1);
+    }
+
+    td {
+        padding: 16px 24px;
+        font-size: 14px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td { background: var(--surface-hov); }
+
+    .empty-state {
+        padding: 60px 20px;
+        text-align: center;
+        color: var(--text-muted);
+        display: none;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 3px solid rgba(255,255,255,0.1);
+        border-radius: 50%;
+        border-top-color: var(--accent);
+        animation: spin 1s ease-in-out infinite;
+        margin: 40px auto;
+        display: block;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .badge.online { background: var(--success-bg); color: var(--success); }
+    .badge.recent { background: var(--accent-glow); color: var(--accent); }
+    .badge.offline { background: var(--surface); color: var(--text-muted); }
+
+    /* ── Validation Styles ─────────────────────────── */
+    .form-group input.invalid {
+        border-color: var(--error) !important;
+        box-shadow: 0 0 8px var(--error-bg);
+    }
+
+    .error-text {
+        color: var(--error);
+        font-size: 11px;
+        margin-top: 4px;
+        display: none;
+        font-weight: 500;
+        animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .shake {
+        animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+    }
+
+    @keyframes shake {
+        10%, 90% { transform: translateX(-1px); }
+        20%, 80% { transform: translateX(2px); }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
+    }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="layout">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="logo-icon">H</div>
+            Health Platform
+        </div>
+
+        <div class="nav-items">
+            <div class="nav-item">Overview</div>
+            <div class="nav-item active">Devices</div>
+            <div class="nav-item">Settings</div>
+        </div>
+
+        <div class="user-profile">
+            <div class="user-info">
+                <div class="avatar">{{if .Email}}{{printf "%c" (index .Email 0)}}{{else}}U{{end}}</div>
+                <div class="email" title="{{.Email}}">{{.Email}}</div>
+            </div>
+            <a href="/logout" class="btn-logout" id="btn-logout">Logout</a>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="header-row">
+            <h1>My Devices</h1>
+            <button class="btn-primary" onclick="toggleAddForm()">+ Add Device</button>
+        </div>
+
+        <div id="add-device-panel">
+            <form id="add-device-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Device Name</label>
+                        <input type="text" id="name" placeholder="e.g. My Smartwatch" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="imei">IMEI Number (<span id="imei-count">0</span>/15)</label>
+                        <input type="text" id="imei" placeholder="15-digit number" required maxlength="15" oninput="formatIMEI(this)" />
+                        <div id="imei-error" class="error-text">IMEI must be exactly 15 digits</div>
+                    </div>
+                    <div class="form-group" style="flex: 0 0 auto;">
+                        <button type="submit" class="btn-primary" id="btn-submit">Register</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <div id="loading-spinner" class="spinner"></div>
+
+            <div id="empty-state" class="empty-state">
+                <div class="empty-icon">⌚</div>
+                <h3>No devices found</h3>
+                <p style="margin-top: 8px;">You haven't registered any smartwatches yet.</p>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="toggleAddForm()">Register a device</button>
+            </div>
+
+            <table id="device-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>IMEI</th>
+                        <th>Status / Last Seen</th>
+                        <th>Registered</th>
+                    </tr>
+                </thead>
+                <tbody id="device-list">
+                    <!-- Devices injected via JS -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    // IMEI Validation
+    function formatIMEI(input) {
+        input.value = input.value.replace(/\D/g, '');
+        const count = input.value.length;
+        document.getElementById('imei-count').textContent = count;
+        
+        // Remove error state as user types
+        input.classList.remove('invalid');
+        const errorMsg = document.getElementById('imei-error');
+        if (errorMsg) errorMsg.style.display = 'none';
+    }
+
+    // Toggle Add Form
+    function toggleAddForm() {
+        const panel = document.getElementById('add-device-panel');
+        if (panel.style.display === 'block') {
+            panel.style.display = 'none';
+        } else {
+            panel.style.display = 'block';
+            document.getElementById('name').focus();
+        }
+    }
+
+    // Time Formatting
+    function timeAgoMessage(isoString) {
+        if (!isoString) return '<span class="badge offline">Never connected</span>';
+
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 5) return '<span class="badge online">Online</span>';
+        if (diffMins < 60) return `<span class="badge recent">${diffMins}m ago</span>`;
+        if (diffMins < 1440) return `<span class="badge offline">${Math.floor(diffMins/60)}h ago</span>`;
+
+        return `<span class="badge offline">${date.toLocaleDateString()}</span>`;
+    }
+
+    // Fetch Devices
+    async function loadDevices() {
+        document.getElementById('loading-spinner').style.display = 'block';
+        document.getElementById('device-table').style.display = 'none';
+        document.getElementById('empty-state').style.display = 'none';
+
+        try {
+            const res = await fetch('/protected/devices');
+            if (!res.ok) {
+                if (res.status === 401) window.location.href = '/';
+                throw new Error('Failed to load devices');
+            }
+
+            const devices = await res.json();
+
+            document.getElementById('loading-spinner').style.display = 'none';
+
+            if (devices && devices.length > 0) {
+                renderDevices(devices);
+                document.getElementById('device-table').style.display = 'table';
+            } else {
+                document.getElementById('empty-state').style.display = 'block';
+            }
+        } catch (err) {
+            console.error(err);
+            document.getElementById('loading-spinner').style.display = 'none';
+            showToast(err.message, 'error');
+        }
+    }
+
+    // Render Devices to DOM
+    function renderDevices(devices) {
+        const tbody = document.getElementById('device-list');
+        tbody.innerHTML = '';
+
+        devices.forEach(dev => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${dev.name || 'Unnamed Device'}</strong></td>
+                <td style="font-family: monospace; color: var(--text-muted);">${dev.imei}</td>
+                <td>${timeAgoMessage(dev.last_seen_at)}</td>
+                <td style="color: var(--text-muted); font-size: 13px;">${new Date(dev.created_at).toLocaleDateString()}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Register Device POST
+    async function registerDevice(e) {
+        if (e) e.preventDefault();
+        console.log("registerDevice triggered for event:", e);
+
+        const form = document.getElementById('add-device-form');
+        const btn = document.getElementById('btn-submit');
+        const imeiInput = document.getElementById('imei');
+        const nameInput = document.getElementById('name');
+
+        if (!imeiInput || !nameInput) {
+            console.error("Inputs not found!");
+            return;
+        }
+
+        const imei = imeiInput.value;
+        const name = nameInput.value;
+
+        console.log("Registering device:", { imei, name });
+        
+        if (!imei || imei.length !== 15) {
+            imeiInput.classList.add('invalid', 'shake');
+            const errorMsg = document.getElementById('imei-error');
+            if (errorMsg) errorMsg.style.display = 'block';
+            
+            setTimeout(() => imeiInput.classList.remove('shake'), 500);
+            imeiInput.focus();
+            return;
+        }
+
+        // Clean up any previous invalid states
+        imeiInput.classList.remove('invalid');
+        const errorMsg = document.getElementById('imei-error');
+        if (errorMsg) errorMsg.style.display = 'none';
+
+        btn.disabled = true;
+        btn.textContent = 'Registering...';
+
+        try {
+            const res = await fetch('/protected/devices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imei, name })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast('Device registered successfully!', 'success');
+                document.getElementById('add-device-form').reset();
+                formatIMEI(document.getElementById('imei'));
+                toggleAddForm();
+                loadDevices(); // reload list
+            } else if (res.status === 409) {
+                showToast('This IMEI is already registered.', 'warning');
+            } else {
+                showToast(data.error || 'Registration failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Register';
+        }
+    }
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDevices();
+
+        const form = document.getElementById('add-device-form');
+        if (form) {
+            form.addEventListener('submit', registerDevice);
+            console.log("Submit listener attached to form");
+        }
+    });
+</script>
+{{end}}

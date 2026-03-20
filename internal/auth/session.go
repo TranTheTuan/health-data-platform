@@ -20,13 +20,13 @@ func Sign(value string, secret string) string {
 
 // Verify checks the signature of a signed string and returns the original value if valid
 func Verify(signedValue string, secret string) (string, error) {
-	parts := strings.Split(signedValue, ".")
-	if len(parts) != 2 {
+	lastDot := strings.LastIndex(signedValue, ".")
+	if lastDot == -1 {
 		return "", ErrInvalidSignature
 	}
 
-	value := parts[0]
-	signature := parts[1]
+	value := signedValue[:lastDot]
+	signature := signedValue[lastDot+1:]
 
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(value))

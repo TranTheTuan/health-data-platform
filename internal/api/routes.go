@@ -18,11 +18,16 @@ func RegisterRoutes(e *echo.Echo, cfg *configs.Config, db *sql.DB) {
 	e.GET("/", ah.Home)
 	e.GET("/login", ah.GoogleLogin)
 	e.GET("/auth/google/callback", ah.GoogleCallback)
+	e.GET("/logout", ah.Logout)
 
 	// Protected routes (require valid session cookie)
+	dashboardRoute := e.Group("/dashboard")
+	dashboardRoute.Use(ah.AuthMiddleware)
+	dashboardRoute.GET("", ah.Dashboard)
+
+	// Create a separate /protected group for API endpoints called from the frontend
 	protected := e.Group("/protected")
 	protected.Use(ah.AuthMiddleware)
-	protected.GET("", ah.ProtectedEndpoint)
 
 	// Device API — Phase 5
 	dh := handlers.NewDeviceHandler(db)

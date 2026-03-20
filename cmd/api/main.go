@@ -33,6 +33,13 @@ func main() {
 
 	// ── Echo HTTP server ─────────────────────────────────────────────────────
 	e := echo.New()
+	
+	renderer, err := api.NewTemplateRenderer("web/templates")
+	if err != nil {
+		log.Fatalf("Failed to parse templates: %v", err)
+	}
+	e.Renderer = renderer
+
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 	api.RegisterRoutes(e, cfg, pool)

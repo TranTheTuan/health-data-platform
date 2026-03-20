@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TranTheTuan/health-data-platform/configs"
@@ -40,7 +41,7 @@ func generateStateOauthCookie(c echo.Context) string {
 }
 
 func (h *AuthHandler) Home(c echo.Context) error {
-	return c.HTML(http.StatusOK, `<html><body><a href="/login">Login with Google</a></body></html>`)
+	return c.Render(http.StatusOK, "login.html", nil)
 }
 
 func (h *AuthHandler) GoogleLogin(c echo.Context) error {
@@ -76,13 +77,21 @@ func (h *AuthHandler) GoogleCallback(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, "Failed reading response")
 	}
 
-	var user map[string]interface{}
+	var user struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+	}
 	if err := json.Unmarshal(contents, &user); err != nil {
 		return c.String(http.StatusInternalServerError, "Failed parsing user info")
 	}
 
-	// Set a signed session cookie
-	signedValue := auth.Sign(fmt.Sprintf("%v", user["id"]), h.cfg.SessionSecret)
+	if user.ID == "" {
+		return c.String(http.StatusInternalServerError, "Google ID missing")
+	}
+
+	// Set a signed session cookie storing userID|email
+	cookieVal := fmt.Sprintf("%s|%s", user.ID, user.Email)
+	signedValue := auth.Sign(cookieVal, h.cfg.SessionSecret)
 	sessionCookie := new(http.Cookie)
 	sessionCookie.Name = "session"
 	sessionCookie.Value = signedValue
@@ -91,7 +100,7 @@ func (h *AuthHandler) GoogleCallback(c echo.Context) error {
 	sessionCookie.Path = "/"
 	c.SetCookie(sessionCookie)
 
-	return c.Redirect(http.StatusTemporaryRedirect, "/protected")
+	return c.Redirect(http.StatusTemporaryRedirect, "/dashboard")
 }
 
 func (h *AuthHandler) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
@@ -102,17 +111,45 @@ func (h *AuthHandler) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		// Verify the signature
-		userID, err := auth.Verify(sessionCookie.Value, h.cfg.SessionSecret)
+		raw, err := auth.Verify(sessionCookie.Value, h.cfg.SessionSecret)
 		if err != nil {
 			return c.String(http.StatusUnauthorized, "Unauthorized: Invalid session")
 		}
 
-		c.Set("user_id", userID)
+		parts := strings.SplitN(raw, "|", 2)
+		c.Set("user_id", parts[0])
+		if len(parts) > 1 {
+			c.Set("user_email", parts[1])
+		}
+
 		return next(c)
 	}
 }
 
-func (h *AuthHandler) ProtectedEndpoint(c echo.Context) error {
-	userID := c.Get("user_id").(string)
-	return c.String(http.StatusOK, fmt.Sprintf("Welcome to the protected route! User ID: %s", userID))
+type DashboardData struct {
+	UserID string
+	Email  string
+}
+
+func (h *AuthHandler) Dashboard(c echo.Context) error {
+	email := ""
+	if e, ok := c.Get("user_email").(string); ok {
+		email = e
+	}
+	return c.Render(http.StatusOK, "dashboard.html", DashboardData{
+		UserID: c.Get("user_id").(string),
+		Email:  email,
+	})
+}
+
+func (h *AuthHandler) Logout(c echo.Context) error {
+	cookie := new(http.Cookie)
+	cookie.Name = "session"
+	cookie.Value = ""
+	cookie.Expires = time.Unix(0, 0)
+	cookie.MaxAge = -1
+	cookie.HttpOnly = true
+	cookie.Path = "/"
+	c.SetCookie(cookie)
+	return c.Redirect(http.StatusTemporaryRedirect, "/")
 }

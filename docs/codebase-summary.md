@@ -1,22 +1,26 @@
 # Codebase Summary
 ## Health Data Platform
 
-### Overview
-This repository uses the standard Go project layout to structure the components of the Health Data Platform. The structure clearly separates application binaries, reusable packages, internal business logic, and deployment configurations.
+### Repository Structure
+This project follows the [Standard Go Project Layout](https://github.com/golang-standards/project-layout).
 
-### Directory Structure & Functionality
-- `/api`: OpenAPI/Swagger specifications, JSON schema files, and protocol definitions.
-- `/build`: Packaging and Continuous Integration scripts (e.g., Dockerfiles, CI configs).
-- `/cmd`: Main applications for this project. The directory name for each application matches the resulting executable (e.g., `/cmd/server`).
-- `/configs`: Configuration file templates or default configs.
-- `/deployments`: IaaS, PaaS, system, and container orchestration deployment configurations (e.g., docker-compose, Kubernetes/Helm).
-- `/docs`: Additional design and user documents beyond code comments.
-- `/internal`: Private application and library code. This code cannot be imported by external applications. Contains the core business logic.
-- `/pkg`: Library code that is safe to be used by external applications.
-- `/scripts`: Utility scripts for build, installation, analysis, and operations.
-- `/test`: Additional external test applications and static test data.
-- `/tools`: Supporting tools for this project.
-- `/web`: Web application specific components like static assets, server-side templates, and Single Page Applications (SPAs).
+- `/cmd`: Main entry points for the applications.
+  - `/cmd/api`: The main combined HTTP and TCP server binary.
+- `/internal`: Private library code, the core of the business logic.
+  - `/internal/api`: Echo HTTP server handlers, renderer, and routes.
+    - `/internal/api/handlers`: Auth (Google OAuth) and Device management endpoints.
+  - `/internal/auth`: Session signing and Google UserInfo handling.
+  - `/internal/db`: PostgreSQL database connection management.
+  - `/internal/tcp`: TCP server for smartwatch data ingestion.
+    - `/internal/tcp/protocol`: Robust frame scanner and parser for the `IW` protocol.
+- `/web`: Web resources and templates.
+  - `/web/templates`: Professional, responsive HTML templates (`base.html`, `dashboard.html`, `login.html`) utilizing Vanilla CSS and modern JavaScript.
+- `/configs`: Configuration templates and environment variable management.
+- `/docs`: Detailed system documentation (this directory).
+- `/plans`: Implementation plans and archived blueprints for specific features.
 
 ### Current State
-Currently, the codebase contains mostly structural scaffoldings following the Go standard layout. The core implementation for the health platform features will be built within the `/internal` and `/pkg` directories, while entry points will be established in `/cmd`.
+As of March 20, 2026, the Health Data Platform is a functional, dual-server application:
+1.  **HTTP/API Server**: Fully functional Google OAuth login flow and a modern Dashboard for user-device registration.
+2.  **TCP Ingestion Server**: A robust, noise-resilient TCP server that authenticates smartwatches via IMEI (AP00) and persists 13+ types of health/location packets.
+3.  **Persistence**: Uses PostgreSQL to store user-to-device mappings and a flexible `device_packets` table for raw and parsed protocol data.
