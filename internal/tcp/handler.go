@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/TranTheTuan/health-data-platform/internal/tcp/protocol"
@@ -100,6 +101,7 @@ func HandleConnection(conn net.Conn, db *sql.DB) {
 		}
 
 		rawFrame := scanner.Text()
+		rawFrame = strings.TrimSpace(rawFrame)
 		frame, err := protocol.ParseFrame(rawFrame)
 		if err != nil {
 			// Skip malformed frames but keep connection alive

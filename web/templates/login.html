@@ -1,0 +1,149 @@
+{{template "base.html" .}}
+{{define "title"}}Login | Health Data Platform{{end}}
+
+{{define "head"}}
+<style>
+    .login-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Animated background blobs */
+    .blob {
+        position: absolute;
+        filter: blur(80px);
+        z-index: -1;
+        opacity: 0.5;
+        border-radius: 50%;
+        animation: float 10s ease-in-out infinite alternate;
+    }
+
+    .blob-1 {
+        width: 400px;
+        height: 400px;
+        background: var(--accent-glow);
+        top: -100px;
+        left: -100px;
+    }
+
+    .blob-2 {
+        width: 300px;
+        height: 300px;
+        background: rgba(52, 211, 153, 0.2);
+        bottom: -50px;
+        right: -50px;
+        animation-delay: -5s;
+    }
+
+    @keyframes float {
+        0% { transform: translate(0, 0) rotate(0deg); }
+        100% { transform: translate(50px, 50px) rotate(15deg); }
+    }
+
+    .login-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 48px;
+        border-radius: var(--radius-lg);
+        text-align: center;
+        max-width: 420px;
+        width: 100%;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(20px);
+    }
+
+    .logo-placeholder {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, var(--accent), #2cd4a2);
+        border-radius: var(--radius-sm);
+        margin: 0 auto 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        color: white;
+        font-weight: bold;
+        box-shadow: var(--shadow-glow);
+    }
+
+    .login-card h1 {
+        font-size: 24px;
+        margin-bottom: 8px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
+    }
+
+    .login-card p {
+        color: var(--text-muted);
+        margin-bottom: 32px;
+        font-size: 15px;
+    }
+
+    .btn-google {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        width: 100%;
+        background: white;
+        color: #3c4043;
+        font-weight: 500;
+        font-size: 15px;
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .btn-google:hover {
+        background: #f8f9fa;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        text-decoration: none;
+    }
+
+    .btn-google img {
+        width: 18px;
+        height: 18px;
+    }
+
+    .footer {
+        margin-top: 32px;
+        font-size: 13px;
+        color: var(--text-dim);
+    }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="login-container">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    
+    <div class="login-card">
+        <div class="logo-placeholder">H</div>
+        <h1>Health Data Platform</h1>
+        <p>Securely manage your smartwatch health data.</p>
+        
+        <a href="/login" class="btn-google">
+            <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="18px" height="18px" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                <path fill="none" d="M0 0h48v48H0z"></path>
+            </svg>
+            Sign in with Google
+        </a>
+
+        <div class="footer">
+            Powered by Go & Echo
+        </div>
+    </div>
+</div>
+{{end}}

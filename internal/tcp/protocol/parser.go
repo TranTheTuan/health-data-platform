@@ -55,7 +55,8 @@ var replyMap = map[string]string{
 
 // Sentinel errors.
 var (
-	ErrInvalidFrame = errors.New("protocol: invalid frame (missing IW prefix or too short)")
+	ErrInvalidFrame = errors.New("protocol: missing IW prefix")
+	ErrTooShort     = errors.New("protocol: payload is too short")
 	ErrUnknownCmd   = errors.New("protocol: unknown command code")
 	ErrInvalidIMEI  = errors.New("protocol: IMEI must be exactly 15 decimal digits")
 )
@@ -96,7 +97,7 @@ func ScanFrame(data []byte, atEOF bool) (advance int, token []byte, err error) {
 func ParseFrame(raw string) (Frame, error) {
 	// Minimum frame: "IW" + 4-char CMD = 6 characters
 	if len(raw) < 6 {
-		return Frame{}, ErrInvalidFrame
+		return Frame{}, ErrTooShort
 	}
 	if raw[:2] != "IW" {
 		return Frame{}, ErrInvalidFrame
