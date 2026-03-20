@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"os"
 	"os/signal"
@@ -16,7 +15,13 @@ import (
 	"github.com/TranTheTuan/health-data-platform/internal/api"
 	"github.com/TranTheTuan/health-data-platform/internal/auth"
 	"github.com/TranTheTuan/health-data-platform/internal/db"
-	"github.com/TranTheTuan/health-data-platform/internal/tcp"
+	
+	"github.com/TranTheTuan/health-data-platform/internal/repository"
+	"github.com/TranTheTuan/health-data-platform/internal/service"
+	http_handler "github.com/TranTheTuan/health-data-platform/internal/handler/http"
+	tcp_handler "github.com/TranTheTuan/health-data-platform/internal/handler/tcp"
+	http_delivery "github.com/TranTheTuan/health-data-platform/internal/delivery/http"
+	tcp_delivery "github.com/TranTheTuan/health-data-platform/internal/delivery/tcp"
 )
 
 func main() {
@@ -24,14 +29,27 @@ func main() {
 	auth.InitGoogleOAuth(cfg)
 
 	// ── Database pool ────────────────────────────────────────────────────────
-	// Shared by both the HTTP server (device API) and the TCP server (packet storage).
 	pool, err := db.NewPool(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer pool.Close()
 
-	// ── Echo HTTP server ─────────────────────────────────────────────────────
+	// ── Dependency Injection Wiring ──────────────────────────────────────────
+	// 1. Repositories
+	devRepo := repository.NewDeviceRepository(pool)
+	
+	// 2. Services
+	devSvc := service.NewDeviceService(devRepo)
+	authSvc := service.NewAuthService()
+	
+	// 3. Handlers
+	devHttpHandler := http_handler.NewDeviceHandler(devSvc)
+	authHttpHandler := http_handler.NewAuthHandler(cfg, authSvc)
+	
+	devTcpHandler := tcp_handler.NewTCPConnectHandler(devSvc)
+
+	// ── Echo HTTP server (Delivery) ──────────────────────────────────────────
 	e := echo.New()
 	
 	renderer, err := api.NewTemplateRenderer("web/templates")
@@ -42,13 +60,13 @@ func main() {
 
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
-	api.RegisterRoutes(e, cfg, pool)
+	
+	http_delivery.RegisterRoutes(e, authHttpHandler, devHttpHandler)
 
-	// ── TCP server ───────────────────────────────────────────────────────────
-	tcpSrv := tcp.NewServer(cfg.TCPAddr, pool)
+	// ── TCP server (Delivery) ────────────────────────────────────────────────
+	tcpSrv := tcp_delivery.NewServer(cfg.TCPAddr, devTcpHandler)
 
-	// ── Graceful shutdown ─────────────────────────────────────────────────────
-	// SIGINT (Ctrl+C) or SIGTERM cancels the root context, stopping both servers.
+	// ── Graceful shutdown ────────────────────────────────────────────────────
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -64,7 +82,6 @@ func main() {
 		return tcpSrv.Start(gCtx)
 	})
 
-	// Shut down Echo when errgroup context is cancelled
 	g.Go(func() error {
 		<-gCtx.Done()
 		return e.Shutdown(context.Background())
@@ -74,6 +91,3 @@ func main() {
 		log.Println("Server stopped:", err)
 	}
 }
-
-// compile-time assertion that pool satisfies the interface expected by device handler
-var _ *sql.DB = (*sql.DB)(nil)
