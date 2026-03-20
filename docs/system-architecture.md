@@ -2,23 +2,39 @@
 ## Health Data Platform
 
 ### High-Level Architecture
-The Health Data Platform is designed as a distributed, service-oriented Go backend that provides robust APIs for consuming and managing health data. It emphasizes a clear separation of concerns, scalability, and security.
+The Health Data Platform is a service-oriented Go backend with a dual-server architecture that provides a separation of concerns between high-throughput data ingestion (TCP) and user dashboard/API management (HTTP).
 
-### Core Components
-1. **API Gateway / Entrypoints (`/cmd`)**: Handles incoming HTTP/gRPC requests, routing, rate-limiting, and initial authentication checks.
-2. **Business Logic Layer (`/internal/app`, `/internal/domain`)**: Contains the core workflows, data validation, and rules specific to health data management.
-3. **Data Access Layer (`/internal/repository`)**: Abstracts database interactions, enabling clean separation from the business logic and simplifying database migrations or changes.
-4. **Shared Libraries (`/pkg`)**: Independent utilities (e.g., custom logging, generic data parsers) that could potentially be reused.
+### Architecture Components
+1. **API Gateway / Entrypoints (`/cmd/api`)**: The single Go binary starts both an Echo HTTP server (8080) and a TCP server (9090) in parallel.
+2. **Business Logic Layer (`/internal/api/handlers`, `/internal/tcp`)**: Core logic for Google OAuth authentication, session management, and the `IW` protocol for smartwatch data.
+3. **Data Access Layer (`/internal/db`, `/internal/device`, `/internal/tcp/repository.go`)**: Abstracts interactions with PostgreSQL for device registration, user data, and the `device_packets` table.
+4. **Shared Libraries (`/internal/auth`, `/internal/tcp/protocol`)**: Utilities for Google UserInfo, HMAC signing, and protocol parsing.
 
-### Data Flow
-1. Client requests arrive at the API layer.
-2. The API layer delegates to the appropriate handlers in `/internal`.
-3. Handlers process business requirements, interacting with the Data Access Layer to read/write persistent state.
-4. Repositories interface with the underlying Datastore (e.g., PostgreSQL, NoSQL document store).
-5. Responses flow back through the handlers to the API layer to be returned to the client.
+### Data Ingestion (TCP Ingestion)
+1. **Connection Hook**: `net.Listen("tcp", addr)` accepts persistent connections.
+2. **HandleConnection**: Each connection is handled in its own goroutine (state-loop).
+3. **ScanFrame**: A custom `bufio.SplitFunc` that handles noise (newlines), delimiters (`[` or `]`), and '#' terminators for robust frame accumulation.
+4. **Auth State Machine**: First packet must be `AP00` (Login) with valid IMEI. Connection is rejected if IMEI is not registered to a user.
+5. **Persistence**: Valid data packets (GPS, Heart rate, etc.) are asynchronously or synchronously persisted to the `device_packets` table.
 
-### Security
-- Use Mutual TLS (mTLS) for internal service-to-service communication.
-- End-to-end encryption for all data entering and leaving the platform.
-- Strict Role-Based Access Control (RBAC) enforced within the business layer.
-- Anonymization and pseudonymization processes applied to PII/PHI data at rest.
+### User Flow (HTTP/API Dashboard)
+1. **User Sign-In**: Authenticates via Google OAuth 2.0.
+2. **Session**: An HMAC-signed cookie is issued, containing user ID and email.
+3. **Dashboard**: The user accesses `dashboard.html` which fetches the device list and provides a registration form with real-time IMEI validation.
+4. **Device Registration**: The user enters a 15-digit IMEI. The backend registers the device to the user's account in the `devices` table.
+
+### Diagram: High-Level Data Flow
+```mermaid
+graph LR
+    subgraph Clients
+        SW[Smartwatch] -- TCP 9090 --> TCPS[TCP Server]
+        Browser[User Browser] -- HTTP 8080 --> HTTPS[HTTP Server]
+    end
+
+    subgraph "HDP Backend (Go/Echo/TCP)"
+        TCPS -- Auth/IMEI --> DB[(PostgreSQL)]
+        HTTPS -- Auth/OAuth --> DB
+        TCPS -- Ingest Packets --> DB
+        HTTPS -- Manage Devices --> DB
+    end
+```

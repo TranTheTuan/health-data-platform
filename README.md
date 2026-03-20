@@ -1,35 +1,48 @@
-# Health Data Platform
+# Health Data Platform (HDP)
 
-This project defines the core architecture and structure for the Health Data Platform. Built natively in Go, the repository leverages the standard Go layout to facilitate modular, scalable, and secure operations within the health data ecosystem.
+A robust, high-performance Go-based backend platform designed for secure health data management and smartwatch device ingestion.
 
-## Documentation Overview
+## Key Features
 
-Detailed documentation is stored in the `/docs` directory. Please review them carefully when joining the project or updating the architecture.
+- **Dual-server architecture**:
+  - **Echo HTTP/API Server (Port 8080)**: Handles user authentication (Google OAuth), RESTful APIs, and a modern web dashboard for device management.
+  - **TCP Ingestion Server (Port 9090)**: Implements the `IW` protocol for robust, persistent smartwatch data stream ingestion with IMEI-based authentication.
+- **Secure Authentication**:
+  - Google OAuth 2.0 integration for seamless user onboarding.
+  - HMAC-signed session cookies for persistent, secure user sessions.
+- **Smartwatch Protocol (IW)**:
+  - Custom `bufio.Scanner` based protocol parser for robust, noise-resilient packet ingestion.
+  - Handles 13+ packet types (GPS, Heart rate, BP, SPO2, etc.).
+- **Modern Web Dashboard**:
+  - Professional, dark-themed UI built with Glassmorphism principles.
+  - Device registration with real-time IMEI validation and interactive feedback.
+  - Real-time device list and status tracking.
+- **Database Persistence**:
+  - PostgreSQL with JSONB for flexible, high-performance health packet storage.
 
-- [Project Overview & PDR](docs/project-overview-pdr.md)
-- [System Architecture](docs/system-architecture.md)
-- [Codebase Summary](docs/codebase-summary.md)
-- [Code Standards](docs/code-standards.md)
-- [Project Roadmap](docs/project-roadmap.md)
-- [Deployment Guide](docs/deployment-guide.md)
-- [Design Guidelines](docs/design-guidelines.md)
+## Tech Stack
 
-## Repository Layout Basics
-
-Based on the [Go standard project layout](https://github.com/golang-standards/project-layout), here's where things are:
-
-- **`/cmd`**: Main application executables.
-- **`/internal`**: Private application code and business logic.
-- **`/pkg`**: Library code safe for external use.
-- **`/api`**: API contracts, swagger files, protobufs.
-- **`/build`**: CI/CD and packaging.
-- **`/deployments`**: Deployment configurations.
-- **`/configs`**: Configuration templates.
-- **`/scripts`**: Automation utilities.
+- **Go (1.22+)**: Primary language for the backend servers.
+- **Echo**: High-performance HTTP framework.
+- **PostgreSQL**: Robust relational datastore.
+- **Vanilla JS/CSS/HTML**: Used for the dashboard (keeping dependencies light and performance high).
+- **Google OAuth 2.0**: For user identity management.
 
 ## Getting Started
 
-1. Clone the repository and initialize the module.
-   `go mod init health-data-platform` (or run `go mod tidy` if already setup).
-2. Follow the directory structure to add logic to `/internal` and entrypoints to `/cmd`.
-3. Consult `AGENTS.md` and the rules located in `.agent/rules/` for AI integration and team coordination guidelines.
+1.  Clone the repository.
+2.  Set up your `.env` with Google OAuth credentials and PostgreSQL connection string.
+3.  Run the platform:
+    ```bash
+    go run cmd/api/main.go
+    ```
+4.  Access the dashboard at `http://localhost:8080/dashboard`.
+
+## Documentation
+
+Comprehensive documentation can be found in the `./docs` directory:
+- [Codebase Summary](docs/codebase-summary.md)
+- [System Architecture](docs/system-architecture.md)
+- [Project Roadmap](docs/project-roadmap.md)
+- [Code Standards](docs/code-standards.md)
+- [Deployment Guide](docs/deployment-guide.md)
