@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: self-hosted  # Use the local runner on the GAN LAN
+    runs-on: ubuntu-latest  # Use the local runner on the GAN LAN
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
 
   deploy:
     needs: build-and-push
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: SSH Deploy to VM
         uses: appleboy/ssh-action@master
