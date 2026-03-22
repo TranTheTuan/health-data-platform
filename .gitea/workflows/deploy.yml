@@ -1,0 +1,43 @@
+name: Gitea Docker CI/CD (Local LAN Only)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-push:
+    runs-on: self-hosted  # Use the local runner on the GAN LAN
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Log in to Gitea Container Registry
+        run: echo "${{ secrets.PAT }}" | docker login 192.168.1.222:3000 -u tuantt --password-stdin
+        
+      - name: Build Docker Image
+        run: |
+          docker build -t 192.168.1.222:3000/tuantt/hdp:${{ github.ref_name }} .
+          docker tag 192.168.1.222:3000/tuantt/hdp:${{ github.ref_name }} 192.168.1.222:3000/tuantt/hdp:latest
+
+      - name: Push Docker Image
+        run: |
+          docker push 192.168.1.222:3000/tuantt/hdp:${{ github.ref_name }}
+          docker push 192.168.1.222:3000/tuantt/hdp:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: self-hosted
+    steps:
+      - name: SSH Deploy to VM
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+              cd ~/homelab/hdp
+              docker compose pull
+              docker compose up -d
+              docker image prune -f

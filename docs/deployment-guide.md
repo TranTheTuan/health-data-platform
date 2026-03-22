@@ -2,13 +2,13 @@
 ## Health Data Platform
 
 ### Overview
-This document describes the procedures for deploying the Health Data Platform (HDP) using containerized services orchestrated by Kubernetes. The architecture includes a dual-port server providing both HTTP/API and TCP/Ingestion services.
+This document describes the procedures for deploying the Health Data Platform (HDP) using containerized services via Docker Compose for an on-premise server. The architecture includes a dual-port server providing both HTTP/API and TCP/Ingestion services.
 
 ### Prerequisites
-- Docker or compatible container runtime.
+- Docker and Docker Compose installed on the target server.
 - Go version 1.22+ installed locally for compilation.
-- Kubernetes cluster (e.g., Minikube, GKE, EKS).
-- PostgreSQL database accessible from the cluster.
+- Gitea Server with Container Registry enabled.
+- PostgreSQL database accessible from the container network.
 - Google OAuth 2.0 Credentials (client ID, client secret).
 
 ### Ports & Connectivity
@@ -17,10 +17,10 @@ This document describes the procedures for deploying the Health Data Platform (H
 - **PostgreSQL 5432**: Database connectivity.
 
 ### Containerization
-1. **Dockerfiles**: The primary `Dockerfile` configurations are located in `/build/package`.
+1. **Dockerfiles**: The primary multi-stage `Dockerfile` is located at the root of the project.
 2. **Building the Image**:
    ```bash
-   docker build -t hdp-api:latest -f build/package/Dockerfile .
+   docker build -t hdp-api:latest .
    ```
 
 ### Configuration & Environment Variables
@@ -31,16 +31,19 @@ The following environment variables MUST be set for the server to operate:
 - `GOOGLE_CALLBACK_URL`: Typically `http://localhost:8080/auth/google/callback` for dev.
 - `DATABASE_URL`: `postgres://user:pass@host:port/dbname`.
 
-### Deploying to Kubernetes
-1. Review the Helm charts located in `/deployments/k8s`.
-2. Create Kubernetes `Secrets` for database credentials and OAuth secrets.
-3. Apply the deployment:
+### Deploying via Docker Compose (On-Premise)
+1. **Configuring the server**: Create a directory such as `~/homelab/hdp` on the target server.
+2. **Docker Compose**: Create a `docker-compose.yml` file pointing to your Gitea Registry image.
+3. **Environment**: Create a `.env` file within the same directory ensuring all environment variables mentioned above are populated.
+4. **Running**:
    ```bash
-   kubectl apply -f deployments/k8s/
+   docker compose pull && docker compose up -d
    ```
-4. **Service Exposure**:
-   - Create a LoadBalancer or NodePort service for both 8080 and 9090.
-   - Note: Some Cloud Load Balancers may require specific configurations for persistent TCP connections on port 9090.
 
 ### CI/CD
-Continuous Integration is configured in `/build/ci`. Each commit to the `main` branch triggers unit tests, linting (`golangci-lint`), and security scans. Tagged releases automatically trigger image building and pushing to the container registry.
+Continuous Deployment is orchestrated using Gitea Actions. 
+The workflow configuration is defined in `.gitea/workflows/deploy.yml`. 
+Each published git tag matching `v*` triggers a process that:
+1. Builds the Docker Image via a locally hosted action runner.
+2. Pushes the Docker image to the Gitea Container Registry over the LAN.
+3. Deploys the container to the destination VM by establishing an SSH connection and running `docker compose up -d`.
