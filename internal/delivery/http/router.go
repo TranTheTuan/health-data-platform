@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes wires all HTTP handlers to the Echo instance.
-func RegisterRoutes(e *echo.Echo, ah *http_handler.AuthHandler, dh *http_handler.DeviceHandler) {
+func RegisterRoutes(e *echo.Echo, ah *http_handler.AuthHandler, dh *http_handler.DeviceHandler, dmh *http_handler.DemoHandler) {
 	e.GET("/", ah.Home)
 	e.GET("/login", ah.GoogleLogin)
 	e.GET("/auth/google/callback", ah.GoogleCallback)
@@ -25,4 +25,10 @@ func RegisterRoutes(e *echo.Echo, ah *http_handler.AuthHandler, dh *http_handler
 
 	dashboardRoute.GET("/devices/:id/packets", dh.PacketInspectPage)
 	protected.GET("/devices/:id/packets", dh.ListPacketsAPI)
+
+	// Demo session routes
+	protected.POST("/devices/:id/demo/session", dmh.StartSession)
+	protected.DELETE("/devices/:id/demo/session", dmh.StopSession)
+	protected.GET("/devices/:id/demo/session", dmh.SessionStatus)
+	protected.POST("/devices/:id/demo/packets", dmh.SendBurst)
 }

@@ -61,6 +61,16 @@
     .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); display: none; }
     .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.1); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s infinite; margin: 40px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Demo Controls ─────────────────────────────────── */
+    .demo-bar { background: var(--surface); padding: 16px 24px; border-radius: var(--radius-lg); border: 1px solid var(--border); margin-bottom: 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .demo-bar h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+    .session-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .session-badge.active { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .session-badge.inactive { background: var(--bg-mid); color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; font-size: 14px; transition: background 0.2s; }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.25); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 {{end}}
 
@@ -128,6 +138,14 @@
                     Refresh
                 </button>
             </div>
+        </div>
+
+        <div class="demo-bar">
+            <h3>Demo</h3>
+            <span id="session-badge" class="session-badge inactive">○ No Session</span>
+            <button id="btn-start" class="btn-primary" onclick="startDemoSession()">Start Session</button>
+            <button id="btn-burst" class="btn-secondary" onclick="sendBurst()" disabled>Send Burst</button>
+            <button id="btn-stop" class="btn-danger" onclick="stopDemoSession()" disabled>Stop Session</button>
         </div>
 
         <div class="card">
@@ -231,11 +249,31 @@
         tbody.innerHTML = '';
         packets.forEach(p => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="white-space: nowrap; color: var(--text-muted); font-size: 13px;">${new Date(p.created_at).toLocaleString()}</td>
-                <td><span class="code-badge">${p.command_code}</span></td>
-                <td class="payload">${p.raw_payload || '<span style="opacity: 0.5;">Empty</span>'}</td>
-            `;
+
+            const tdTime = document.createElement('td');
+            tdTime.style.cssText = 'white-space: nowrap; color: var(--text-muted); font-size: 13px;';
+            tdTime.textContent = new Date(p.created_at).toLocaleString();
+
+            const tdCmd = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'code-badge';
+            badge.textContent = p.command_code;
+            tdCmd.appendChild(badge);
+
+            const tdPayload = document.createElement('td');
+            tdPayload.className = 'payload';
+            if (p.raw_payload) {
+                tdPayload.textContent = p.raw_payload;
+            } else {
+                const empty = document.createElement('span');
+                empty.style.opacity = '0.5';
+                empty.textContent = 'Empty';
+                tdPayload.appendChild(empty);
+            }
+
+            tr.appendChild(tdTime);
+            tr.appendChild(tdCmd);
+            tr.appendChild(tdPayload);
             tbody.appendChild(tr);
         });
     }
@@ -299,6 +337,94 @@
         document.getElementById('filterTo').value = now.toISOString().slice(0,16);
 
         fetchPackets();
+        checkSessionStatus();
     });
+
+    // ── Demo Session ─────────────────────────────────────────────────
+    function updateSessionBadge(active) {
+        const badge = document.getElementById('session-badge');
+        const btnStart = document.getElementById('btn-start');
+        const btnBurst = document.getElementById('btn-burst');
+        const btnStop = document.getElementById('btn-stop');
+
+        if (active) {
+            badge.textContent = '● Session Active';
+            badge.className = 'session-badge active';
+            btnStart.disabled = true;
+            btnBurst.disabled = false;
+            btnStop.disabled = false;
+        } else {
+            badge.textContent = '○ No Session';
+            badge.className = 'session-badge inactive';
+            btnStart.disabled = false;
+            btnBurst.disabled = true;
+            btnStop.disabled = true;
+        }
+    }
+
+    async function startDemoSession() {
+        document.getElementById('btn-start').disabled = true;
+        try {
+            const res = await fetch(`/protected/devices/${deviceId}/demo/session`, { method: 'POST' });
+            if (res.status === 409) { showToast('Session already active', 'warning'); return; }
+            if (!res.ok) {
+                const d = await res.json();
+                showToast(d.error || 'Failed to start session', 'error');
+                return;
+            }
+            updateSessionBadge(true);
+            showToast('Demo session started', 'success');
+        } catch {
+            showToast('Network error', 'error');
+        } finally {
+            checkSessionStatus();
+        }
+    }
+
+    async function stopDemoSession() {
+        document.getElementById('btn-stop').disabled = true;
+        try {
+            const res = await fetch(`/protected/devices/${deviceId}/demo/session`, { method: 'DELETE' });
+            if (!res.ok) {
+                const d = await res.json();
+                showToast(d.error || 'Failed to stop session', 'error');
+                return;
+            }
+            updateSessionBadge(false);
+            showToast('Demo session stopped', 'success');
+        } catch {
+            showToast('Network error', 'error');
+        } finally {
+            document.getElementById('btn-stop').disabled = false;
+            checkSessionStatus();
+        }
+    }
+
+    async function sendBurst() {
+        document.getElementById('btn-burst').disabled = true;
+        document.getElementById('btn-stop').disabled = true;
+        try {
+            const res = await fetch(`/protected/devices/${deviceId}/demo/packets`, { method: 'POST' });
+            if (res.status === 404) { updateSessionBadge(false); showToast('Session expired', 'error'); return; }
+            if (!res.ok) { showToast('Failed to send packets', 'error'); return; }
+            const d = await res.json();
+            showToast(`Sent ${d.sent} packets`, 'success');
+            refreshData();
+        } catch {
+            showToast('Network error', 'error');
+        } finally {
+            checkSessionStatus();
+        }
+    }
+
+    async function checkSessionStatus() {
+        try {
+            const res = await fetch(`/protected/devices/${deviceId}/demo/session`);
+            if (res.ok) {
+                const d = await res.json();
+                updateSessionBadge(d.active);
+            }
+        } catch { /* silent */ }
+    }
 </script>
 {{end}}
