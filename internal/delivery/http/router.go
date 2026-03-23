@@ -22,4 +22,7 @@ func RegisterRoutes(e *echo.Echo, ah *http_handler.AuthHandler, dh *http_handler
 
 	protected.POST("/devices", dh.Register)
 	protected.GET("/devices", dh.List)
+
+	dashboardRoute.GET("/devices/:id/packets", dh.PacketInspectPage)
+	protected.GET("/devices/:id/packets", dh.ListPacketsAPI)
 }

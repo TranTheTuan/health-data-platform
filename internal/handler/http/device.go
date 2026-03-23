@@ -57,3 +57,62 @@ func (h *DeviceHandler) List(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, resp)
 }
+
+func (h *DeviceHandler) checkOwnership(c echo.Context, userID, deviceID string) bool {
+	devices, err := h.svc.ListDevices(c.Request().Context(), userID)
+	if err != nil {
+		return false
+	}
+	for _, d := range devices {
+		if d.ID == deviceID {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *DeviceHandler) PacketInspectPage(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.Redirect(http.StatusTemporaryRedirect, "/")
+	}
+
+	deviceID := c.Param("id")
+	if !h.checkOwnership(c, userID, deviceID) {
+		return c.Redirect(http.StatusTemporaryRedirect, "/dashboard")
+	}
+
+	email := ""
+	if e, ok := c.Get("user_email").(string); ok {
+		email = e
+	}
+	return c.Render(http.StatusOK, "packets.html", map[string]interface{}{
+		"DeviceID": deviceID,
+		"Email":    email,
+	})
+}
+
+func (h *DeviceHandler) ListPacketsAPI(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	deviceID := c.Param("id")
+	if !h.checkOwnership(c, userID, deviceID) {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "forbidden"})
+	}
+
+	var req dto.ListPacketsRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid query parameters"})
+	}
+	req.DeviceID = deviceID
+
+	resp, err := h.svc.ListDevicePackets(c.Request().Context(), userID, req)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}

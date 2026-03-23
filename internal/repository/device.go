@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/TranTheTuan/health-data-platform/internal/domain"
 )
@@ -20,6 +21,7 @@ type DeviceRepository interface {
 	LookupDeviceByIMEI(ctx context.Context, imei string) (domain.Device, error)
 	UpdateLastSeen(ctx context.Context, deviceID string) error
 	InsertPacket(ctx context.Context, pkt domain.Packet) error
+	ListPackets(ctx context.Context, userID, deviceID string, packetType *string, from, to *time.Time, limit, offset int) ([]domain.Packet, int, error)
 }
 
 type pgDeviceRepo struct {
@@ -99,6 +101,73 @@ func (r *pgDeviceRepo) InsertPacket(ctx context.Context, pkt domain.Packet) erro
 		return fmt.Errorf("device repo insert packet: %w", err)
 	}
 	return nil
+}
+
+func (r *pgDeviceRepo) ListPackets(ctx context.Context, userID, deviceID string, packetType *string, from, to *time.Time, limit, offset int) ([]domain.Packet, int, error) {
+	queryCount := `SELECT count(*) FROM device_packets WHERE user_id = $1 AND device_id = $2`
+	queryPackets := `SELECT id, device_id, user_id, packet_type, raw_payload, parsed_data, recorded_at
+                     FROM device_packets WHERE user_id = $1 AND device_id = $2`
+
+	args := []interface{}{userID, deviceID}
+	argID := 3
+
+	if packetType != nil && *packetType != "" {
+		condition := fmt.Sprintf(" AND packet_type = $%d", argID)
+		queryCount += condition
+		queryPackets += condition
+		args = append(args, *packetType)
+		argID++
+	}
+	if from != nil {
+		condition := fmt.Sprintf(" AND recorded_at >= $%d", argID)
+		queryCount += condition
+		queryPackets += condition
+		args = append(args, *from)
+		argID++
+	}
+	if to != nil {
+		condition := fmt.Sprintf(" AND recorded_at <= $%d", argID)
+		queryCount += condition
+		queryPackets += condition
+		args = append(args, *to)
+		argID++
+	}
+
+	queryPackets += fmt.Sprintf(" ORDER BY recorded_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
+
+	// Execute Count
+	var total int
+	err := r.db.QueryRowContext(ctx, queryCount, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("device repo count packets: %w", err)
+	}
+
+	if total == 0 {
+		return []domain.Packet{}, 0, nil
+	}
+
+	// Execute Fetch
+	argsFetch := append(args, limit, offset)
+	rows, err := r.db.QueryContext(ctx, queryPackets, argsFetch...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("device repo fetch packets: %w", err)
+	}
+	defer rows.Close()
+
+	var result []domain.Packet
+	for rows.Next() {
+		var p domain.Packet
+		var parsed []byte
+		if err := rows.Scan(&p.ID, &p.DeviceID, &p.UserID, &p.CommandCode, &p.RawPayload, &parsed, &p.CreatedAt); err != nil {
+			return nil, 0, fmt.Errorf("device repo scan packet: %w", err)
+		}
+		if parsed != nil {
+			p.ParsedData = parsed
+		}
+		result = append(result, p)
+	}
+
+	return result, total, rows.Err()
 }
 
 // Helpers
