@@ -12,6 +12,7 @@
 - [x] **IMEI Authentication**: Support for device login (AP00) and ownership check.
 - [x] **Web Portal**: Responsive dashboard (8080) for device management and registration.
 - [x] **Inline Validation**: High-quality user experience with real-time field validation for registration.
+- [x] **Demo TCP Packet Generator**: Built-in demo feature for testing and live demonstrations without physical smartwatches.
 - [ ] **Heartrate & Blood Pressure Parsing**: Expand the TCP handler to parse and store specific health metrics from APHP/APHT packets.
 - [ ] Create detailed data models and database repositories in `/internal/domain`.
 

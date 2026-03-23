@@ -15,7 +15,6 @@ import (
 	"github.com/TranTheTuan/health-data-platform/internal/api"
 	"github.com/TranTheTuan/health-data-platform/internal/auth"
 	"github.com/TranTheTuan/health-data-platform/internal/db"
-	
 	"github.com/TranTheTuan/health-data-platform/internal/repository"
 	"github.com/TranTheTuan/health-data-platform/internal/service"
 	http_handler "github.com/TranTheTuan/health-data-platform/internal/handler/http"
@@ -47,6 +46,9 @@ func main() {
 	devHttpHandler := http_handler.NewDeviceHandler(devSvc)
 	authHttpHandler := http_handler.NewAuthHandler(cfg, authSvc)
 	
+	demoSvc := service.NewDemoService(cfg.TCPAddr)
+	demoHandler := http_handler.NewDemoHandler(demoSvc, devSvc)
+
 	devTcpHandler := tcp_handler.NewTCPConnectHandler(devSvc)
 
 	// ── Echo HTTP server (Delivery) ──────────────────────────────────────────
@@ -61,7 +63,7 @@ func main() {
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 	
-	http_delivery.RegisterRoutes(e, authHttpHandler, devHttpHandler)
+	http_delivery.RegisterRoutes(e, authHttpHandler, devHttpHandler, demoHandler)
 
 	// ── TCP server (Delivery) ────────────────────────────────────────────────
 	tcpSrv := tcp_delivery.NewServer(cfg.TCPAddr, devTcpHandler)
