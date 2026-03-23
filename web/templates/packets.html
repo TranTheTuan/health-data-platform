@@ -296,11 +296,6 @@
     }
 
     function refreshData() {
-        // To get the newest data, reset 'To' date to right now.
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('filterTo').value = now.toISOString().slice(0,16);
-        
         currentOffset = 0;
         fetchPackets();
     }
@@ -331,11 +326,6 @@
 
     // Init
     document.addEventListener('DOMContentLoaded', () => {
-        // Set default filter to today
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('filterTo').value = now.toISOString().slice(0,16);
-
         fetchPackets();
         checkSessionStatus();
     });
