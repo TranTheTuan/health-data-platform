@@ -382,6 +382,7 @@
                         <th>IMEI</th>
                         <th>Status / Last Seen</th>
                         <th>Registered</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="device-list">
@@ -476,6 +477,9 @@
                 <td style="font-family: monospace; color: var(--text-muted);">${dev.imei}</td>
                 <td>${timeAgoMessage(dev.last_seen_at)}</td>
                 <td style="color: var(--text-muted); font-size: 13px;">${new Date(dev.created_at).toLocaleDateString()}</td>
+                <td>
+                    <a href="/dashboard/devices/${dev.id}/packets" class="badge" style="background: var(--surface-hov); color: var(--text); border: 1px solid var(--border); text-decoration: none;">View Data</a>
+                </td>
             `;
             tbody.appendChild(tr);
         });

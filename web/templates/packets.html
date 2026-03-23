@@ -1,0 +1,304 @@
+{{template "base.html" .}}
+{{define "title"}}Device Packets | Health Data Platform{{end}}
+
+{{define "head"}}
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; }
+    
+    /* ── Sidebar ──────────────────────────────────────── */
+    .sidebar { width: 260px; background: var(--bg-mid); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 18px; color: white; margin-bottom: 40px; }
+    .brand .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), #2cd4a2); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .nav-items { display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
+    .nav-item { padding: 10px 16px; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 500; transition: all 0.2s; cursor: pointer; text-decoration: none; }
+    .nav-item:hover { background: var(--surface); color: var(--text); }
+    .nav-item.active { background: var(--accent-glow); color: var(--accent); }
+    .user-profile { margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+    .user-info { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--accent); font-weight: bold; }
+    .email { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-logout { padding: 8px 0; text-align: center; width: 100%; background: transparent; color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; transition: all 0.2s; text-decoration: none; }
+    .btn-logout:hover { background: var(--surface); color: white; }
+
+    /* ── Main Content ─────────────────────────────────── */
+    .main { flex-grow: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    h1 { font-size: 24px; font-weight: 600; color: white; margin: 0; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; font-size: 14px; font-weight: 500; }
+    .btn-secondary:hover { background: var(--surface-hov); }
+
+    /* ── Filter Bar ───────────────────────────────────── */
+    .filter-bar { background: var(--surface); padding: 16px 24px; border-radius: var(--radius-lg); border: 1px solid var(--border); margin-bottom: 24px; display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-group input, .form-group select { background: var(--bg); border: 1px solid var(--border); color: white; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 14px; min-width: 150px; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+    
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+    
+    .btn-primary { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; transition: background 0.2s; }
+    .btn-primary:hover { background: var(--accent-dark); }
+
+    /* ── Table & Pagination ───────────────────────────── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .table-container { overflow-x: auto; flex-grow: 1; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 16px 24px; font-size: 12px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1); white-space: nowrap; }
+    td { padding: 16px 24px; font-size: 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface-hov); }
+
+    .code-badge { background: var(--bg-mid); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--accent); }
+    .payload { font-family: monospace; font-size: 13px; word-break: break-all; color: var(--text-muted); }
+
+    .pagination { border-top: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.1); }
+    .page-info { font-size: 13px; color: var(--text-muted); }
+    .page-controls { display: flex; gap: 8px; align-items: center; }
+    .page-controls button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; }
+    .page-controls button:hover:not(:disabled) { background: var(--surface-hov); }
+    .page-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); display: none; }
+    .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.1); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s infinite; margin: 40px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="layout" data-device-id="{{.DeviceID}}">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="logo-icon">H</div>
+            Health Platform
+        </div>
+        <div class="nav-items">
+            <a href="/dashboard" class="nav-item">Overview</a>
+            <a href="/dashboard" class="nav-item active">Devices</a>
+            <div class="nav-item">Settings</div>
+        </div>
+        <div class="user-profile">
+            <div class="user-info">
+                <div class="avatar">{{if .Email}}{{printf "%c" (index .Email 0)}}{{else}}U{{end}}</div>
+                <div class="email" title="{{.Email}}">{{.Email}}</div>
+            </div>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="header-row">
+            <div>
+                <a href="/dashboard" class="btn-secondary" style="margin-right: 16px;">&larr; Back</a>
+                <h1 style="display: inline-block;">Packet Inspector</h1>
+            </div>
+        </div>
+
+        <div class="filter-bar">
+            <div class="form-group">
+                <label>Command Type</label>
+                <select id="filterType">
+                    <option value="">All Types</option>
+                    <option value="AP00">AP00 - Login</option>
+                    <option value="AP01">AP01 - GPS Location</option>
+                    <option value="AP02">AP02 - LBS Location</option>
+                    <option value="AP03">AP03 - Heartbeat</option>
+                    <option value="AP07">AP07 - Audio</option>
+                    <option value="AP10">AP10 - Alarm</option>
+                    <option value="AP49">AP49 - Heart Rate</option>
+                    <option value="APHT">APHT - HR + BP</option>
+                    <option value="APHP">APHP - HR+BP+SPO2</option>
+                    <option value="AP50">AP50 - Temperature</option>
+                    <option value="AP97">AP97 - Sleep</option>
+                    <option value="APWT">APWT - Weather</option>
+                    <option value="APHD">APHD - ECG</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Start Time (Optional)</label>
+                <input type="datetime-local" id="filterFrom" step="1" onclick="this.showPicker()">
+            </div>
+            <div class="form-group">
+                <label>End Time (Optional)</label>
+                <input type="datetime-local" id="filterTo" step="1" onclick="this.showPicker()">
+            </div>
+            <div class="form-group" style="padding-bottom: 2px; flex-direction: row; gap: 8px;">
+                <button class="btn-primary" style="height: 40px;" onclick="applyFilters()">Apply</button>
+                <button class="btn-secondary" style="height: 40px; display: flex; align-items: center;" onclick="refreshData()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div id="loading" class="spinner"></div>
+            
+            <div id="empty-state" class="empty-state">
+                <h3 style="margin-bottom: 8px;">No packets found</h3>
+                <p>Try clearing your filters or refreshing.</p>
+            </div>
+
+            <div class="table-container" id="table-container" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Command</th>
+                            <th>Raw Payload</th>
+                        </tr>
+                    </thead>
+                    <tbody id="packet-list"></tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <div class="page-info">
+                    Showing <span id="page-start">0</span> - <span id="page-end">0</span> of <span id="page-total">0</span> total
+                </div>
+                <div class="page-controls">
+                    <select id="pageSize" onchange="changePageSize()">
+                        <option value="10">10 / page</option>
+                        <option value="20" selected>20 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                    </select>
+                    <button id="btn-prev" onclick="prevPage()">&laquo; Prev</button>
+                    <button id="btn-next" onclick="nextPage()">Next &raquo;</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    let currentOffset = 0;
+    let currentTotal = 0;
+    const deviceId = document.querySelector('.layout').dataset.deviceId;
+
+    function getLocalISO(dateInput) {
+        if (!dateInput.value) return "";
+        const d = new Date(dateInput.value);
+        return d.toISOString();
+    }
+
+    async function fetchPackets() {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('table-container').style.display = 'none';
+        document.getElementById('empty-state').style.display = 'none';
+
+        const type = document.getElementById('filterType').value;
+        const fromDate = getLocalISO(document.getElementById('filterFrom'));
+        const toDate = getLocalISO(document.getElementById('filterTo'));
+        const limit = parseInt(document.getElementById('pageSize').value);
+
+        const params = new URLSearchParams({
+            limit: limit,
+            offset: currentOffset
+        });
+        if (type) params.append('type', type);
+        if (fromDate) params.append('from', fromDate);
+        if (toDate) params.append('to', toDate);
+
+        try {
+            const res = await fetch(`/protected/devices/${deviceId}/packets?${params.toString()}`);
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            
+            document.getElementById('loading').style.display = 'none';
+            currentTotal = data.total || 0;
+            const limit = parseInt(document.getElementById('pageSize').value);
+
+            if (!data.packets || data.packets.length === 0) {
+                document.getElementById('empty-state').style.display = 'block';
+                updatePagination(0, 0, currentTotal, limit);
+                return;
+            }
+
+            renderTable(data.packets);
+            document.getElementById('table-container').style.display = 'block';
+            updatePagination(data.packets.length, currentOffset, currentTotal, limit);
+        } catch (err) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('empty-state').style.display = 'block';
+            showToast("Error loading packets", "error");
+        }
+    }
+
+    function renderTable(packets) {
+        const tbody = document.getElementById('packet-list');
+        tbody.innerHTML = '';
+        packets.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="white-space: nowrap; color: var(--text-muted); font-size: 13px;">${new Date(p.created_at).toLocaleString()}</td>
+                <td><span class="code-badge">${p.command_code}</span></td>
+                <td class="payload">${p.raw_payload || '<span style="opacity: 0.5;">Empty</span>'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function updatePagination(countRendered, offset, total, limit) {
+        const start = total === 0 ? 0 : offset + 1;
+        const end = offset + countRendered;
+
+        document.getElementById('page-start').textContent = start;
+        document.getElementById('page-end').textContent = end;
+        document.getElementById('page-total').textContent = total;
+
+        document.getElementById('btn-prev').disabled = offset <= 0;
+        document.getElementById('btn-next').disabled = end >= total;
+    }
+
+    function applyFilters() {
+        currentOffset = 0;
+        fetchPackets();
+    }
+
+    function refreshData() {
+        // To get the newest data, reset 'To' date to right now.
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('filterTo').value = now.toISOString().slice(0,16);
+        
+        currentOffset = 0;
+        fetchPackets();
+    }
+
+    function changePageSize() {
+        currentOffset = 0;
+        fetchPackets();
+    }
+
+    function nextPage() {
+        const limit = parseInt(document.getElementById('pageSize').value);
+        if (currentOffset + limit < currentTotal) {
+            currentOffset += limit;
+            fetchPackets();
+        }
+    }
+
+    function prevPage() {
+        const limit = parseInt(document.getElementById('pageSize').value);
+        if (currentOffset - limit >= 0) {
+            currentOffset -= limit;
+            fetchPackets();
+        } else {
+            currentOffset = 0;
+            fetchPackets();
+        }
+    }
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+        // Set default filter to today
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('filterTo').value = now.toISOString().slice(0,16);
+
+        fetchPackets();
+    });
+</script>
+{{end}}

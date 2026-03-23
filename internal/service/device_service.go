@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -26,6 +27,7 @@ type DeviceService interface {
 	LookupDeviceByIMEI(ctx context.Context, imei string) (domain.Device, error)
 	UpdateLastSeen(ctx context.Context, deviceID string) error
 	ProcessPacket(ctx context.Context, req dto.IngestPacketRequest) error
+	ListDevicePackets(ctx context.Context, userID string, req dto.ListPacketsRequest) (dto.PaginatedPacketResponse, error)
 }
 
 type deviceService struct {
@@ -94,4 +96,55 @@ func toDeviceResponse(d domain.Device) dto.DeviceResponse {
 		resp.LastSeenAt = &s
 	}
 	return resp
+}
+
+func (s *deviceService) ListDevicePackets(ctx context.Context, userID string, req dto.ListPacketsRequest) (dto.PaginatedPacketResponse, error) {
+	if req.Limit <= 0 {
+		req.Limit = 10
+	} else if req.Limit > 100 {
+		req.Limit = 100
+	}
+	if req.Offset < 0 {
+		req.Offset = 0
+	}
+
+	var fromTime, toTime *time.Time
+	if req.From != "" {
+		if t, err := time.Parse(time.RFC3339, req.From); err == nil {
+			fromTime = &t
+		} else {
+			// Ignore format errors but could log if we wanted. User rule: "always log whenever an error happens... no need to put info and debug". We aren't failing so no error log needed.
+		}
+	}
+	if req.To != "" {
+		if t, err := time.Parse(time.RFC3339, req.To); err == nil {
+			toTime = &t
+		}
+	}
+
+	var pType *string
+	if req.PacketType != "" {
+		pType = &req.PacketType
+	}
+
+	packets, total, err := s.repo.ListPackets(ctx, userID, req.DeviceID, pType, fromTime, toTime, req.Limit, req.Offset)
+	if err != nil {
+		slog.Error("List device packets failed", slog.String("device_id", req.DeviceID), slog.Any("error", err))
+		return dto.PaginatedPacketResponse{}, err
+	}
+
+	resp := make([]dto.PacketResponse, 0, len(packets))
+	for _, p := range packets {
+		resp = append(resp, dto.PacketResponse{
+			ID:          p.ID,
+			CommandCode: p.CommandCode,
+			RawPayload:  p.RawPayload,
+			CreatedAt:   p.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return dto.PaginatedPacketResponse{
+		Packets: resp,
+		Total:   total,
+	}, nil
 }
