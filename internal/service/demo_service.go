@@ -105,14 +105,14 @@ func (s *demoService) SendBurst(_ context.Context, deviceID string, count int) e
 	}
 
 	for i := 0; i < count; i++ {
-		sess.conn.SetDeadline(time.Now().Add(3 * time.Second))
+		// Use write-only deadline so no-reply commands (UD) don't block on read
+		sess.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 		if _, err := sess.conn.Write([]byte(demo.RandomFrame(sess.deviceID))); err != nil {
 			s.closeAndRemove(deviceID)
 			return err
 		}
-		sess.reader.ReadString(']') //nolint:errcheck // ack is best-effort
 	}
-	sess.conn.SetDeadline(time.Time{})
+	sess.conn.SetWriteDeadline(time.Time{})
 	return nil
 }
 
