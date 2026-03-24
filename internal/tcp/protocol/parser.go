@@ -1,146 +1,129 @@
-// Package protocol implements frame parsing and reply building for the IW smartwatch protocol.
+// Package protocol implements frame parsing and reply building for the Wonlex/Setracker smartwatch protocol.
 //
-// Frame format: IW<CMD><PAYLOAD>#
-//   - "IW" is a fixed 2-char prefix
-//   - <CMD> is a 4-char command code (e.g. "AP00", "APHT")
-//   - <PAYLOAD> is everything between CMD and the '#' terminator
-//   - '#' is the frame terminator (NOT a newline)
+// Frame format: [manufacturer*deviceID*contentLength*content]
+//   - manufacturer: "3G" for device frames, "CS" for server replies
+//   - deviceID: 10-digit decimal device identifier
+//   - contentLength: 4-char uppercase hex (e.g. "00BC" = 188 bytes)
+//   - content: CMD alone or CMD,payload (comma-separated)
 //
 // Devices may send fragmented TCP segments. Use ScanFrame with bufio.Scanner
-// to accumulate bytes until '#' is received.
+// to accumulate bytes until ']' is received.
 package protocol
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"regexp"
-	"time"
+	"strings"
 )
 
-// Command codes for all 13 IW protocol packet types.
+// Command codes for Wonlex protocol packet types.
 const (
-	CmdLogin       = "AP00" // IMEI login/auth      → IWBP00;<yyyyMMddHHmmss>,<tz>#
-	CmdGPSLoc      = "AP01" // GPS+LBS location     → IWBP01#
-	CmdLBSLoc      = "AP02" // Multi-base LBS loc   → IWBP02#
-	CmdHeartbeat   = "AP03" // Keepalive ping       → IWBP03#
-	CmdAudio       = "AP07" // Audio upload         → IWBP07#
-	CmdAlarm       = "AP10" // Alarm + return addr  → IWBP10#
-	CmdHeartRate   = "AP49" // Heart rate           → IWBP49#
-	CmdHRAndBP     = "APHT" // HR + blood pressure  → IWBPHT#
-	CmdHRBPSPO2    = "APHP" // HR+BP+SPO2+glucose   → IWBPHP#
-	CmdTemperature = "AP50" // Body temperature     → IWBP50#
-	CmdSleep       = "AP97" // Sleep data           → IWBP97#
-	CmdWeather     = "APWT" // Weather sync request → IWBPWT#
-	CmdECG         = "APHD" // ECG upload           → IWBPHD#
+	CmdLink     = "LK"     // Keep-alive/link     → [CS*deviceID*0002*LK]
+	CmdLocation = "UD"     // GPS+LBS+WiFi report → no reply
+	CmdBlind    = "UD2"    // Blind spot fill-in   → no reply
+	CmdAlarm    = "AL"     // Alarm data report    → [3G*deviceID*0002*AL]
+	CmdConfig   = "CONFIG" // Device config report → [CS*deviceID*0008*CONFIG,1]
 )
 
-// replyMap maps each inbound command to its outbound BP reply prefix (without '#').
-// The '#' terminator is appended by BuildReply.
-var replyMap = map[string]string{
-	CmdLogin:       "IWBP00", // special: timestamp appended separately
-	CmdGPSLoc:      "IWBP01",
-	CmdLBSLoc:      "IWBP02",
-	CmdHeartbeat:   "IWBP03",
-	CmdAudio:       "IWBP07",
-	CmdAlarm:       "IWBP10",
-	CmdHeartRate:   "IWBP49",
-	CmdHRAndBP:     "IWBPHT",
-	CmdHRBPSPO2:    "IWBPHP",
-	CmdTemperature: "IWBP50",
-	CmdSleep:       "IWBP97",
-	CmdWeather:     "IWBPWT",
-	CmdECG:         "IWBPHD",
+// replyRule defines how to reply to a given command.
+type replyRule struct {
+	prefix     string // manufacturer prefix in reply ("CS" or "3G")
+	needsReply bool
+}
+
+var replyRules = map[string]replyRule{
+	CmdLink:     {"CS", true},
+	CmdLocation: {"", false},
+	CmdBlind:    {"", false},
+	CmdAlarm:    {"3G", true},
+	CmdConfig:   {"CS", true},
 }
 
 // Sentinel errors.
 var (
-	ErrInvalidFrame = errors.New("protocol: missing IW prefix")
-	ErrTooShort     = errors.New("protocol: payload is too short")
-	ErrUnknownCmd   = errors.New("protocol: unknown command code")
-	ErrInvalidIMEI  = errors.New("protocol: IMEI must be exactly 15 decimal digits")
+	ErrInvalidFrame    = errors.New("protocol: invalid frame format")
+	ErrInvalidDeviceID = errors.New("protocol: device ID must be exactly 10 decimal digits")
 )
 
-// reIMEI validates that an IMEI is exactly 15 ASCII decimal digits.
-var reIMEI = regexp.MustCompile(`^\d{15}$`)
-
-// Frame holds a parsed IW protocol frame.
+// Frame holds a parsed Wonlex protocol frame.
 type Frame struct {
-	Cmd     string // 4-char command code, e.g. "AP00"
-	Payload string // everything after CMD and before '#'
+	Manufacturer string // "3G" from device frames
+	DeviceID     string // 10-digit device identifier
+	Length       string // 4-char hex content length
+	Cmd          string // command code: "UD", "AL", "LK", "UD2", "CONFIG"
+	Payload      string // everything after CMD comma, or "" if no payload
 }
 
-// ScanFrame is a bufio.SplitFunc that splits on the '#' frame terminator.
+// ScanFrame is a bufio.SplitFunc that splits on the Wonlex frame delimiters '[' and ']'.
 // It handles fragmented TCP reads correctly — tokens are only returned once
-// a complete frame ending with '#' has been accumulated in the buffer.
+// a complete frame enclosed in '[...]' has been accumulated in the buffer.
 //
 // Anti-DoS: callers should set bufio.Scanner.Buffer to max 64KB.
 func ScanFrame(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if atEOF && len(data) == 0 {
+	start := bytes.IndexByte(data, '[')
+	if start < 0 {
 		return 0, nil, nil
 	}
 
-	if i := bytes.IndexByte(data, '#'); i >= 0 {
-		// Return everything up to (but not including) '#', advance past '#'
-		return i + 1, data[:i], nil
-	}
-
-	// No '#' yet — request more data
-	if atEOF {
+	end := bytes.IndexByte(data[start:], ']')
+	if end < 0 {
+		if atEOF {
+			return 0, nil, nil
+		}
 		return 0, nil, nil
 	}
-	return 0, nil, nil
+
+	// Return content between '[' and ']', advance past ']'
+	return start + end + 1, data[start+1 : start+end], nil
 }
 
-// ParseFrame parses a raw IW frame string (with '#' already stripped by ScanFrame).
-// It validates the "IW" prefix, extracts the 4-char command code, and returns the payload.
+// ParseFrame parses a raw Wonlex frame string (with '[' and ']' already stripped by ScanFrame).
+// It splits by '*' into 4 fields and extracts CMD and payload from content.
 func ParseFrame(raw string) (Frame, error) {
-	// Minimum frame: "IW" + 4-char CMD = 6 characters
-	if len(raw) < 6 {
-		return Frame{}, ErrTooShort
-	}
-	if raw[:2] != "IW" {
+	parts := strings.SplitN(raw, "*", 4)
+	if len(parts) != 4 {
 		return Frame{}, ErrInvalidFrame
 	}
 
-	cmd := raw[2:6]
-	payload := raw[6:]
+	manufacturer := parts[0]
+	deviceID := parts[1]
+	length := parts[2]
+	content := parts[3]
 
-	return Frame{Cmd: cmd, Payload: payload}, nil
+	if len(deviceID) != 10 {
+		return Frame{}, ErrInvalidDeviceID
+	}
+
+	// Split content into CMD and payload at first comma
+	cmd, payload := content, ""
+	if idx := strings.IndexByte(content, ','); idx >= 0 {
+		cmd = content[:idx]
+		payload = content[idx+1:]
+	}
+
+	return Frame{
+		Manufacturer: manufacturer,
+		DeviceID:     deviceID,
+		Length:       length,
+		Cmd:          cmd,
+		Payload:      payload,
+	}, nil
 }
 
-// ParseAP00 extracts and validates the IMEI from an AP00 login payload.
-// The payload is the raw IMEI string (15 decimal digits).
-func ParseAP00(payload string) (string, error) {
-	// Trim any trailing whitespace that might be present in malformed packets
-	imei := payload
-	if len(imei) != 15 || !reIMEI.MatchString(imei) {
-		return "", fmt.Errorf("%w: got %q", ErrInvalidIMEI, imei)
-	}
-	return imei, nil
-}
-
-// BuildReply constructs the correct server acknowledgment string for a given command.
-//
-// For AP00 (login), the reply includes the current UTC timestamp and timezone offset:
-//
-//	IWBP00;20260319103000,0#
-//
-// For all other commands, the reply is simply:
-//
-//	IW<BPxx>#
-func BuildReply(cmd string) string {
-	prefix, ok := replyMap[cmd]
-	if !ok {
-		// Unknown command — return a generic error reply; caller should close connection
-		return "IWBPERR#"
+// BuildReply constructs the server acknowledgment string for a given command and device ID.
+// Returns "" for commands that need no reply (UD, UD2).
+func BuildReply(deviceID, cmd string) string {
+	rule, ok := replyRules[cmd]
+	if !ok || !rule.needsReply {
+		return ""
 	}
 
-	if cmd == CmdLogin {
-		ts := time.Now().UTC().Format("20060102150405")
-		// Timezone offset 0 = UTC; smartwatch uses this to display local time
-		return fmt.Sprintf("%s;%s,0#", prefix, ts)
+	content := cmd
+	if cmd == CmdConfig {
+		content = "CONFIG,1" // acknowledge with result=1 (OK)
 	}
 
-	return prefix + "#"
+	lenHex := fmt.Sprintf("%04X", len(content))
+	return fmt.Sprintf("[%s*%s*%s*%s]", rule.prefix, deviceID, lenHex, content)
 }

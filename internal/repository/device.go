@@ -67,7 +67,8 @@ func (r *pgDeviceRepo) ListDevices(ctx context.Context, userID string) ([]domain
 }
 
 func (r *pgDeviceRepo) LookupDeviceByIMEI(ctx context.Context, imei string) (domain.Device, error) {
-	const q = `SELECT id, imei, user_id, name, last_seen_at, created_at FROM devices WHERE imei = $1 LIMIT 1`
+	// Match by last 10 digits to support both 10-digit Wonlex device IDs and legacy 15-digit IMEIs
+	const q = `SELECT id, imei, user_id, name, last_seen_at, created_at FROM devices WHERE RIGHT(imei, 10) = $1 LIMIT 1`
 
 	row := r.db.QueryRowContext(ctx, q, imei)
 	d, err := scanDevice(row)

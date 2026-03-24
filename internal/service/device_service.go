@@ -13,12 +13,13 @@ import (
 )
 
 var (
-	ErrInvalidIMEI   = errors.New("imei must be exactly 15 decimal digits")
+	ErrInvalidIMEI   = errors.New("device ID must be 10-15 decimal digits")
 	ErrDuplicateIMEI = repository.ErrDuplicateIMEI
 	ErrNotFound      = repository.ErrNotFound
 )
 
-var reIMEI = regexp.MustCompile(`^\d{15}$`)
+// reIMEI accepts both 10-digit Wonlex device IDs and legacy 15-digit IMEIs.
+var reIMEI = regexp.MustCompile(`^\d{10,15}$`)
 
 // DeviceService encapsulates business logic related to device registration and streaming.
 type DeviceService interface {
