@@ -26,8 +26,9 @@ type DemoService interface {
 }
 
 type demoSession struct {
-	conn   net.Conn
-	reader *bufio.Reader
+	conn     net.Conn
+	reader   *bufio.Reader
+	deviceID string // 10-digit Wonlex device ID used in frame headers
 }
 
 type demoService struct {
@@ -69,21 +70,29 @@ func (s *demoService) StartSession(_ context.Context, deviceID, imei string) err
 		return err
 	}
 
-	if _, err = conn.Write([]byte(demo.LoginFrame(imei))); err != nil {
+	// Wonlex protocol uses a 10-digit device ID. If the stored IMEI is 15 digits,
+	// use the last 10 digits — this matches the RIGHT(imei, 10) lookup in the TCP handler.
+	wonlexID := imei
+	if len(imei) > 10 {
+		wonlexID = imei[len(imei)-10:]
+	}
+
+	// Send LK (link/keep-alive) frame — authenticates via the 10-digit device ID in the header
+	if _, err = conn.Write([]byte(demo.LinkFrame(wonlexID))); err != nil {
 		conn.Close()
 		return err
 	}
 
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	reader := bufio.NewReader(conn)
-	ack, err := reader.ReadString('#')
-	if err != nil || !strings.HasPrefix(ack, "IWBP00") {
+	ack, err := reader.ReadString(']')
+	if err != nil || !strings.Contains(ack, "LK") {
 		conn.Close()
-		return errors.New("demo: login rejected by TCP server")
+		return errors.New("demo: link rejected by TCP server")
 	}
 	conn.SetDeadline(time.Time{})
 
-	s.sessions[deviceID] = &demoSession{conn: conn, reader: reader}
+	s.sessions[deviceID] = &demoSession{conn: conn, reader: reader, deviceID: wonlexID}
 	return nil
 }
 
@@ -97,11 +106,11 @@ func (s *demoService) SendBurst(_ context.Context, deviceID string, count int) e
 
 	for i := 0; i < count; i++ {
 		sess.conn.SetDeadline(time.Now().Add(3 * time.Second))
-		if _, err := sess.conn.Write([]byte(demo.RandomFrame())); err != nil {
+		if _, err := sess.conn.Write([]byte(demo.RandomFrame(sess.deviceID))); err != nil {
 			s.closeAndRemove(deviceID)
 			return err
 		}
-		sess.reader.ReadString('#') //nolint:errcheck // ack is best-effort
+		sess.reader.ReadString(']') //nolint:errcheck // ack is best-effort
 	}
 	sess.conn.SetDeadline(time.Time{})
 	return nil

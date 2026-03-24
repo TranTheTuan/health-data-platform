@@ -15,12 +15,12 @@ import (
 	"github.com/TranTheTuan/health-data-platform/internal/api"
 	"github.com/TranTheTuan/health-data-platform/internal/auth"
 	"github.com/TranTheTuan/health-data-platform/internal/db"
-	"github.com/TranTheTuan/health-data-platform/internal/repository"
-	"github.com/TranTheTuan/health-data-platform/internal/service"
-	http_handler "github.com/TranTheTuan/health-data-platform/internal/handler/http"
-	tcp_handler "github.com/TranTheTuan/health-data-platform/internal/handler/tcp"
 	http_delivery "github.com/TranTheTuan/health-data-platform/internal/delivery/http"
 	tcp_delivery "github.com/TranTheTuan/health-data-platform/internal/delivery/tcp"
+	http_handler "github.com/TranTheTuan/health-data-platform/internal/handler/http"
+	tcp_handler "github.com/TranTheTuan/health-data-platform/internal/handler/tcp"
+	"github.com/TranTheTuan/health-data-platform/internal/repository"
+	"github.com/TranTheTuan/health-data-platform/internal/service"
 )
 
 func main() {
@@ -37,15 +37,15 @@ func main() {
 	// ── Dependency Injection Wiring ──────────────────────────────────────────
 	// 1. Repositories
 	devRepo := repository.NewDeviceRepository(pool)
-	
+
 	// 2. Services
 	devSvc := service.NewDeviceService(devRepo)
 	authSvc := service.NewAuthService()
-	
+
 	// 3. Handlers
 	devHttpHandler := http_handler.NewDeviceHandler(devSvc)
 	authHttpHandler := http_handler.NewAuthHandler(cfg, authSvc)
-	
+
 	demoSvc := service.NewDemoService(cfg.TCPAddr)
 	demoHandler := http_handler.NewDemoHandler(demoSvc, devSvc)
 
@@ -53,7 +53,7 @@ func main() {
 
 	// ── Echo HTTP server (Delivery) ──────────────────────────────────────────
 	e := echo.New()
-	
+
 	renderer, err := api.NewTemplateRenderer("web/templates")
 	if err != nil {
 		log.Fatalf("Failed to parse templates: %v", err)
@@ -62,7 +62,7 @@ func main() {
 
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
-	
+
 	http_delivery.RegisterRoutes(e, authHttpHandler, devHttpHandler, demoHandler)
 
 	// ── TCP server (Delivery) ────────────────────────────────────────────────

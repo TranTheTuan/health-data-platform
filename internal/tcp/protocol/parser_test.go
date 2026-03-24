@@ -1,56 +1,127 @@
 package protocol
 
 import (
-	"strings"
 	"testing"
 )
 
-// TestParseFrame covers valid and invalid frame inputs.
-func TestParseFrame(t *testing.T) {
+// TestScanFrame verifies '[...]' splitting behavior.
+func TestScanFrame(t *testing.T) {
 	tests := []struct {
-		name    string
-		raw     string
-		wantCmd string
-		wantPay string
-		wantErr bool
+		name      string
+		data      string
+		atEOF     bool
+		wantAdv   int
+		wantToken string
+		wantNil   bool // expect nil token (no complete frame)
 	}{
 		{
-			name:    "valid AP00 login frame",
-			raw:     "IWAP00353456789012345",
-			wantCmd: "AP00",
-			wantPay: "353456789012345",
+			name:      "complete frame",
+			data:      "[3G*8800000015*0002*LK]",
+			wantAdv:   23,
+			wantToken: "3G*8800000015*0002*LK",
 		},
 		{
-			name:    "valid APHT health frame",
-			raw:     "IWAPHT72,80,120",
-			wantCmd: "APHT",
-			wantPay: "72,80,120",
+			name:      "frame with leading garbage",
+			data:      "garbage[3G*8800000015*0002*LK]",
+			wantAdv:   30,
+			wantToken: "3G*8800000015*0002*LK",
 		},
 		{
-			name:    "valid AP03 heartbeat (empty payload)",
-			raw:     "IWAP03",
-			wantCmd: "AP03",
-			wantPay: "",
+			name:    "partial frame no closing bracket",
+			data:    "[3G*8800000015",
+			atEOF:   false,
+			wantNil: true,
 		},
 		{
-			name:    "valid APHP frame",
-			raw:     "IWAPHPpayloaddata",
-			wantCmd: "APHP",
-			wantPay: "payloaddata",
+			name:    "empty data",
+			data:    "",
+			wantNil: true,
 		},
 		{
-			name:    "missing IW prefix",
-			raw:     "AP00353456789012345",
+			name:    "no opening bracket",
+			data:    "random data",
+			wantNil: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			adv, tok, err := ScanFrame([]byte(tc.data), tc.atEOF)
+			if err != nil {
+				t.Fatalf("ScanFrame error: %v", err)
+			}
+			if tc.wantNil {
+				if tok != nil || adv != 0 {
+					t.Errorf("expected nil token and 0 advance, got adv=%d tok=%q", adv, tok)
+				}
+				return
+			}
+			if adv != tc.wantAdv {
+				t.Errorf("advance = %d, want %d", adv, tc.wantAdv)
+			}
+			if string(tok) != tc.wantToken {
+				t.Errorf("token = %q, want %q", string(tok), tc.wantToken)
+			}
+		})
+	}
+}
+
+// TestParseFrame covers valid and invalid Wonlex frame inputs.
+func TestParseFrame(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		wantManuf    string
+		wantDeviceID string
+		wantLength   string
+		wantCmd      string
+		wantPayload  string
+		wantErr      bool
+	}{
+		{
+			name:         "LK keep-alive frame",
+			raw:          "3G*8800000015*0002*LK",
+			wantManuf:    "3G",
+			wantDeviceID: "8800000015",
+			wantLength:   "0002",
+			wantCmd:      "LK",
+			wantPayload:  "",
+		},
+		{
+			name:         "UD location frame with payload",
+			raw:          "3G*8800000015*00BC*UD,120118,150405,A,22.570720,N,113.862017,E,0.00,0.0,0.0,6",
+			wantManuf:    "3G",
+			wantDeviceID: "8800000015",
+			wantLength:   "00BC",
+			wantCmd:      "UD",
+			wantPayload:  "120118,150405,A,22.570720,N,113.862017,E,0.00,0.0,0.0,6",
+		},
+		{
+			name:         "AL alarm frame with payload",
+			raw:          "3G*8800000015*0030*AL,120118,150405,A,22.5,N,113.8,E,0.0,180.0",
+			wantManuf:    "3G",
+			wantDeviceID: "8800000015",
+			wantLength:   "0030",
+			wantCmd:      "AL",
+			wantPayload:  "120118,150405,A,22.5,N,113.8,E,0.0,180.0",
+		},
+		{
+			name:         "CONFIG frame",
+			raw:          "3G*8800000015*0006*CONFIG",
+			wantManuf:    "3G",
+			wantDeviceID: "8800000015",
+			wantLength:   "0006",
+			wantCmd:      "CONFIG",
+			wantPayload:  "",
+		},
+		{
+			name:    "too few fields (missing content)",
+			raw:     "3G*8800000015*0002",
 			wantErr: true,
 		},
 		{
-			name:    "frame too short (only IW)",
-			raw:     "IW",
-			wantErr: true,
-		},
-		{
-			name:    "frame too short (IW + 3 chars)",
-			raw:     "IWAP0",
+			name:    "device ID not 10 digits",
+			raw:     "3G*123456789*0002*LK",
 			wantErr: true,
 		},
 		{
@@ -72,166 +143,47 @@ func TestParseFrame(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseFrame(%q) error: %v", tc.raw, err)
 			}
+			if got.Manufacturer != tc.wantManuf {
+				t.Errorf("Manufacturer = %q, want %q", got.Manufacturer, tc.wantManuf)
+			}
+			if got.DeviceID != tc.wantDeviceID {
+				t.Errorf("DeviceID = %q, want %q", got.DeviceID, tc.wantDeviceID)
+			}
+			if got.Length != tc.wantLength {
+				t.Errorf("Length = %q, want %q", got.Length, tc.wantLength)
+			}
 			if got.Cmd != tc.wantCmd {
 				t.Errorf("Cmd = %q, want %q", got.Cmd, tc.wantCmd)
 			}
-			if got.Payload != tc.wantPay {
-				t.Errorf("Payload = %q, want %q", got.Payload, tc.wantPay)
+			if got.Payload != tc.wantPayload {
+				t.Errorf("Payload = %q, want %q", got.Payload, tc.wantPayload)
 			}
 		})
 	}
 }
 
-// TestParseAP00 covers valid and invalid IMEI strings.
-func TestParseAP00(t *testing.T) {
-	tests := []struct {
-		name    string
-		payload string
-		wantIMEI string
-		wantErr  bool
-	}{
-		{
-			name:     "valid 15-digit IMEI",
-			payload:  "353456789012345",
-			wantIMEI: "353456789012345",
-		},
-		{
-			name:    "non-digit characters",
-			payload: "35345678901234A",
-			wantErr: true,
-		},
-		{
-			name:    "14-digit IMEI (too short)",
-			payload: "35345678901234",
-			wantErr: true,
-		},
-		{
-			name:    "16-digit IMEI (too long)",
-			payload: "3534567890123456",
-			wantErr: true,
-		},
-		{
-			name:    "empty string",
-			payload: "",
-			wantErr: true,
-		},
-		{
-			name:    "IMEI with spaces",
-			payload: "353456 89012345",
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParseAP00(tc.payload)
-			if tc.wantErr {
-				if err == nil {
-					t.Errorf("ParseAP00(%q) = nil error, want error", tc.payload)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseAP00(%q) error: %v", tc.payload, err)
-			}
-			if got != tc.wantIMEI {
-				t.Errorf("IMEI = %q, want %q", got, tc.wantIMEI)
-			}
-		})
-	}
-}
-
-// TestBuildReply verifies reply strings for all known commands.
+// TestBuildReply verifies reply strings for all Wonlex commands.
 func TestBuildReply(t *testing.T) {
+	const deviceID = "8800000015"
+
 	tests := []struct {
-		cmd          string
-		wantPrefix   string
-		wantSuffix   string
+		cmd  string
+		want string
 	}{
-		{CmdLogin, "IWBP00;", "#"},
-		{CmdGPSLoc, "IWBP01", "#"},
-		{CmdLBSLoc, "IWBP02", "#"},
-		{CmdHeartbeat, "IWBP03", "#"},
-		{CmdAudio, "IWBP07", "#"},
-		{CmdAlarm, "IWBP10", "#"},
-		{CmdHeartRate, "IWBP49", "#"},
-		{CmdHRAndBP, "IWBPHT", "#"},
-		{CmdHRBPSPO2, "IWBPHP", "#"},
-		{CmdTemperature, "IWBP50", "#"},
-		{CmdSleep, "IWBP97", "#"},
-		{CmdWeather, "IWBPWT", "#"},
-		{CmdECG, "IWBPHD", "#"},
+		{CmdLink, "[CS*8800000015*0002*LK]"},
+		{CmdAlarm, "[3G*8800000015*0002*AL]"},
+		{CmdConfig, "[CS*8800000015*0008*CONFIG,1]"},
+		{CmdLocation, ""},  // no reply
+		{CmdBlind, ""},     // no reply
+		{"UNKNOWN", ""},    // unknown cmd → no reply
 	}
 
 	for _, tc := range tests {
 		t.Run("BuildReply_"+tc.cmd, func(t *testing.T) {
-			reply := BuildReply(tc.cmd)
-			if !strings.HasPrefix(reply, tc.wantPrefix) {
-				t.Errorf("BuildReply(%q) = %q, want prefix %q", tc.cmd, reply, tc.wantPrefix)
-			}
-			if !strings.HasSuffix(reply, tc.wantSuffix) {
-				t.Errorf("BuildReply(%q) = %q, want suffix %q", tc.cmd, reply, tc.wantSuffix)
+			got := BuildReply(deviceID, tc.cmd)
+			if got != tc.want {
+				t.Errorf("BuildReply(%q, %q) = %q, want %q", deviceID, tc.cmd, got, tc.want)
 			}
 		})
-	}
-}
-
-// TestBuildReplyAP00Format validates the AP00 reply contains a well-formed timestamp.
-func TestBuildReplyAP00Format(t *testing.T) {
-	reply := BuildReply(CmdLogin)
-	// Expected format: IWBP00;YYYYMMDDHHmmss,0#
-	// e.g. IWBP00;20260319103000,0#
-	if !strings.HasPrefix(reply, "IWBP00;") {
-		t.Errorf("AP00 reply %q must start with IWBP00;", reply)
-	}
-	if !strings.HasSuffix(reply, "#") {
-		t.Errorf("AP00 reply %q must end with #", reply)
-	}
-
-	// Strip IWBP00; prefix and # suffix, should be "YYYYMMDDHHmmss,0"
-	inner := strings.TrimPrefix(reply, "IWBP00;")
-	inner = strings.TrimSuffix(inner, "#")
-	parts := strings.Split(inner, ",")
-	if len(parts) != 2 {
-		t.Errorf("AP00 reply inner %q should have format <timestamp>,<tz>", inner)
-	}
-	if len(parts[0]) != 14 {
-		t.Errorf("AP00 timestamp %q should be 14 chars (YYYYMMDDHHmmss)", parts[0])
-	}
-}
-
-// TestBuildReplyUnknown verifies unknown commands return an error reply.
-func TestBuildReplyUnknown(t *testing.T) {
-	reply := BuildReply("APXX")
-	if reply != "IWBPERR#" {
-		t.Errorf("unknown cmd should return IWBPERR#, got %q", reply)
-	}
-}
-
-// TestScanFrame verifies # splitting behavior.
-func TestScanFrame(t *testing.T) {
-	// Full frame: advance past '#', token is the frame without '#'
-	data := []byte("IWAP00353456789012345#")
-	adv, tok, err := ScanFrame(data, false)
-	if err != nil {
-		t.Fatalf("ScanFrame error: %v", err)
-	}
-	if adv != len(data) {
-		t.Errorf("advance = %d, want %d", adv, len(data))
-	}
-	if string(tok) != "IWAP00353456789012345" {
-		t.Errorf("token = %q, want %q", string(tok), "IWAP00353456789012345")
-	}
-}
-
-// TestScanFramePartial verifies that incomplete frames (no '#') return 0, nil, nil.
-func TestScanFramePartial(t *testing.T) {
-	data := []byte("IWAP00353") // no '#'
-	adv, tok, err := ScanFrame(data, false)
-	if err != nil {
-		t.Fatalf("ScanFrame partial error: %v", err)
-	}
-	if adv != 0 || tok != nil {
-		t.Errorf("partial frame should return 0, nil; got adv=%d tok=%q", adv, tok)
 	}
 }

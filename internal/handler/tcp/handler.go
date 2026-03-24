@@ -3,10 +3,8 @@ package tcp
 import (
 	"bufio"
 	"context"
-	"errors"
-	"log"
+	"log/slog"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/TranTheTuan/health-data-platform/internal/dto"
@@ -29,95 +27,85 @@ func NewTCPConnectHandler(svc service.DeviceService) *TCPConnectHandler {
 	return &TCPConnectHandler{svc: svc}
 }
 
-// HandleConnection processes the connection state loop.
+// HandleConnection processes the Wonlex protocol connection state loop.
+// Authentication: first frame's DeviceID (10-digit) is looked up in the DB.
+// Every subsequent frame is persisted; replies are sent only for commands that require them.
 func (h *TCPConnectHandler) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 	ctx := context.Background()
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(protocol.ScanFrame)
-	buf := make([]byte, maxFrameBytes)
-	scanner.Buffer(buf, maxFrameBytes)
+	scanner.Buffer(make([]byte, maxFrameBytes), maxFrameBytes)
 
+	// Auth: read first frame within authTimeout
 	if err := conn.SetDeadline(time.Now().Add(authTimeout)); err != nil {
 		return
 	}
-
 	if !scanner.Scan() {
 		return
 	}
 
-	rawFrame := scanner.Text()
-	frame, err := protocol.ParseFrame(rawFrame)
-	if err != nil || frame.Cmd != protocol.CmdLogin {
-		return
-	}
-
-	imei, err := protocol.ParseAP00(frame.Payload)
+	frame, err := protocol.ParseFrame(scanner.Text())
 	if err != nil {
 		return
 	}
 
-	// Talk to service using Domain directly here is permitted if retrieving state.
-	// But according to strict plan, we should use Domain.
-	device, err := h.svc.LookupDeviceByIMEI(ctx, imei)
+	// Device ID in frame header IS the authentication — no special login command needed
+	device, err := h.svc.LookupDeviceByIMEI(ctx, frame.DeviceID)
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			return
-		}
-		log.Printf("tcp: db lookup error for IMEI: %v", err)
 		return
 	}
 
 	if err := h.svc.UpdateLastSeen(ctx, device.ID); err != nil {
-		log.Printf("tcp: update last_seen failed for device %s: %v", device.ID, err)
+		slog.Error("tcp: update last_seen failed", slog.String("device_id", device.ID), slog.Any("error", err))
 	}
 
-	reply := protocol.BuildReply(frame.Cmd)
-	if _, err := conn.Write([]byte(reply)); err != nil {
-		return
+	// Reply to first frame if the command requires it
+	if reply := protocol.BuildReply(frame.DeviceID, frame.Cmd); reply != "" {
+		if _, err := conn.Write([]byte(reply)); err != nil {
+			return
+		}
 	}
 
+	h.persistPacket(ctx, device.ID, device.UserID, frame)
+
+	// Main loop: persist all frames, reply only when needed
 	if err := conn.SetDeadline(time.Now().Add(idleTimeout)); err != nil {
 		return
 	}
-
 	for scanner.Scan() {
 		if err := conn.SetDeadline(time.Now().Add(idleTimeout)); err != nil {
 			return
 		}
 
-		rawFrame := strings.TrimSpace(scanner.Text())
-		frame, err := protocol.ParseFrame(rawFrame)
+		frame, err := protocol.ParseFrame(scanner.Text())
 		if err != nil {
 			continue
 		}
 
-		if shouldPersist(frame.Cmd) {
-			ingestReq := dto.IngestPacketRequest{
-				DeviceID:    device.ID,
-				UserID:      device.UserID,
-				CommandCode: frame.Cmd,
-				RawPayload:  frame.Payload,
-				ParsedData:  nil, // Assuming generic raw payload for now
-			}
-			if err := h.svc.ProcessPacket(ctx, ingestReq); err != nil {
-				log.Printf("tcp: insert packet error device %s cmd %s: %v", device.ID, frame.Cmd, err)
-			}
-		}
+		h.persistPacket(ctx, device.ID, device.UserID, frame)
 
-		replyStr := protocol.BuildReply(frame.Cmd)
-		if _, err := conn.Write([]byte(replyStr)); err != nil {
-			return
+		if reply := protocol.BuildReply(frame.DeviceID, frame.Cmd); reply != "" {
+			if _, err := conn.Write([]byte(reply)); err != nil {
+				return
+			}
 		}
 	}
 }
 
-func shouldPersist(cmd string) bool {
-	switch cmd {
-	case protocol.CmdHeartbeat, protocol.CmdWeather:
-		return false
-	default:
-		return true
+func (h *TCPConnectHandler) persistPacket(ctx context.Context, deviceID, userID string, frame protocol.Frame) {
+	req := dto.IngestPacketRequest{
+		DeviceID:    deviceID,
+		UserID:      userID,
+		CommandCode: frame.Cmd,
+		RawPayload:  frame.Payload,
+	}
+	if err := h.svc.ProcessPacket(ctx, req); err != nil {
+		slog.Error("tcp: insert packet failed",
+			slog.String("device_id", deviceID),
+			slog.String("cmd", frame.Cmd),
+			slog.Any("error", err),
+		)
 	}
 }

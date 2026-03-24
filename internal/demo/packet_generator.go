@@ -8,54 +8,48 @@ import (
 	"github.com/TranTheTuan/health-data-platform/internal/tcp/protocol"
 )
 
-// PersistableCommands lists packet types valid for demo bursts.
+// PersistableCommands lists packet types used for demo bursts.
 var PersistableCommands = []string{
-	protocol.CmdHeartRate,   // AP49
-	protocol.CmdHRAndBP,     // APHT
-	protocol.CmdHRBPSPO2,    // APHP
-	protocol.CmdTemperature, // AP50
-	protocol.CmdGPSLoc,      // AP01
-	protocol.CmdSleep,       // AP97
+	protocol.CmdLocation, // UD
+	protocol.CmdAlarm,    // AL
 }
 
-// RandomFrame returns a complete IW frame string for a random packet type.
-func RandomFrame() string {
+// BuildWonlexFrame constructs a Wonlex frame: [3G*deviceID*LEN*CMD] or [3G*deviceID*LEN*CMD,payload]
+func BuildWonlexFrame(deviceID, cmd, payload string) string {
+	content := cmd
+	if payload != "" {
+		content = cmd + "," + payload
+	}
+	lenHex := fmt.Sprintf("%04X", len(content))
+	return fmt.Sprintf("[3G*%s*%s*%s]", deviceID, lenHex, content)
+}
+
+// LinkFrame constructs the LK keep-alive/link frame for the given device ID.
+func LinkFrame(deviceID string) string {
+	return BuildWonlexFrame(deviceID, protocol.CmdLink, "")
+}
+
+// RandomFrame returns a complete Wonlex frame for a random persistable command.
+func RandomFrame(deviceID string) string {
 	cmd := PersistableCommands[rand.Intn(len(PersistableCommands))]
-	return BuildFrame(cmd, randomPayload(cmd))
-}
-
-// BuildFrame constructs a client-side IW frame: "IW<CMD><PAYLOAD>#"
-func BuildFrame(cmd, payload string) string {
-	return "IW" + cmd + payload + "#"
-}
-
-// LoginFrame constructs the AP00 login frame for the given IMEI.
-func LoginFrame(imei string) string {
-	return BuildFrame(protocol.CmdLogin, imei)
+	return BuildWonlexFrame(deviceID, cmd, randomPayload(cmd))
 }
 
 func randomPayload(cmd string) string {
 	switch cmd {
-	case protocol.CmdHeartRate:
-		return fmt.Sprintf("%d", randRange(55, 105))
-	case protocol.CmdHRAndBP:
-		return fmt.Sprintf("%d,%d,%d", randRange(60, 100), randRange(100, 140), randRange(60, 90))
-	case protocol.CmdHRBPSPO2:
-		return fmt.Sprintf("%d,%d,%d,%d,%.1f", randRange(60, 100), randRange(100, 140), randRange(60, 90), randRange(95, 100), float32(randRange(45, 65))/10.0)
-	case protocol.CmdTemperature:
-		return fmt.Sprintf("%d", randRange(3600, 3750))
-	case protocol.CmdGPSLoc:
-		lat := 21.0 + float64(rand.Intn(100))/1000.0
-		lng := 105.8 + float64(rand.Intn(100))/1000.0
-		ts := time.Now().UTC().Format("20060102150405")
-		return fmt.Sprintf("%.4f,%.4f,10,%d,6,%s", lat, lng, rand.Intn(5), ts)
-	case protocol.CmdSleep:
-		return fmt.Sprintf("%d,%d,%d", randRange(60, 180), randRange(30, 120), randRange(10, 60))
+	case protocol.CmdLocation:
+		// Simplified UD location payload (Hanoi area)
+		ts := time.Now().UTC().Format("060102,150405")
+		lat := 21.0 + float64(rand.Intn(1000))/10000.0
+		lng := 105.8 + float64(rand.Intn(10000))/10000.0
+		speed := rand.Intn(80)
+		sats := 6 + rand.Intn(6)
+		return fmt.Sprintf("%s,A,%.6f,N,%.6f,E,%d.00,0.0,0.0,%d,100,51,14188,0,00010010,6,255,460,0,9360,5081,156,...", ts, lat, lng, speed, sats)
+	case protocol.CmdAlarm:
+		// Simplified AL payload (location + alarm flags)
+		ts := time.Now().UTC().Format("060102,150405")
+		return fmt.Sprintf("%s,A,21.027763,N,105.834160,E,0.00,188.6,0.0,9,100,51,14188,0,00200000,...", ts)
 	default:
 		return ""
 	}
-}
-
-func randRange(min, max int) int {
-	return min + rand.Intn(max-min+1)
 }
