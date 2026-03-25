@@ -62,7 +62,7 @@ func (h *TCPConnectHandler) HandleConnection(conn net.Conn) {
 	}
 
 	// Reply to first frame if the command requires it
-	if reply := protocol.BuildReply(frame.DeviceID, frame.Cmd); reply != "" {
+	if reply := protocol.BuildReply(frame.Manufacturer, frame.DeviceID, frame.Cmd); reply != "" {
 		if _, err := conn.Write([]byte(reply)); err != nil {
 			return
 		}
@@ -86,7 +86,7 @@ func (h *TCPConnectHandler) HandleConnection(conn net.Conn) {
 
 		h.persistPacket(ctx, device.ID, device.UserID, frame)
 
-		if reply := protocol.BuildReply(frame.DeviceID, frame.Cmd); reply != "" {
+		if reply := protocol.BuildReply(frame.Manufacturer, frame.DeviceID, frame.Cmd); reply != "" {
 			if _, err := conn.Write([]byte(reply)); err != nil {
 				return
 			}

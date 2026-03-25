@@ -1,7 +1,7 @@
 // Package protocol implements frame parsing and reply building for the Wonlex/Setracker smartwatch protocol.
 //
 // Frame format: [manufacturer*deviceID*contentLength*content]
-//   - manufacturer: "3G" for device frames, "CS" for server replies
+//   - manufacturer: "3G"/"CS" (fixed for both device and server frames)
 //   - deviceID: 10-digit decimal device identifier
 //   - contentLength: 4-char uppercase hex (e.g. "00BC" = 188 bytes)
 //   - content: CMD alone or CMD,payload (comma-separated)
@@ -19,25 +19,21 @@ import (
 
 // Command codes for Wonlex protocol packet types.
 const (
-	CmdLink     = "LK"     // Keep-alive/link     → [CS*deviceID*0002*LK]
-	CmdLocation = "UD"     // GPS+LBS+WiFi report → no reply
-	CmdBlind    = "UD2"    // Blind spot fill-in   → no reply
-	CmdAlarm    = "AL"     // Alarm data report    → [3G*deviceID*0002*AL]
-	CmdConfig   = "CONFIG" // Device config report → [CS*deviceID*0008*CONFIG,1]
+	CmdLink        = "LK"       // Keep-alive/link     → [3G*deviceID*0002*LK]
+	CmdLocation    = "UD"       // GPS+LBS+WiFi report → no reply
+	CmdLocation3G  = "UD_WCDMA" // 3G WCDMA GPS+LBS+WiFi report → no reply
+	CmdLocation4G  = "UD_LTE"   // 4G LTE GPS+LBS+WiFi report → no reply
+	CmdBlind       = "UD2"      // Blind spot fill-in   → no reply
+	CmdAlarm       = "AL"       // Alarm data report    → [3G*deviceID*0002*AL]
+	CmdConfig      = "CONFIG"   // Device config report → [3G*deviceID*LEN*CONFIG,1]
 )
 
-// replyRule defines how to reply to a given command.
-type replyRule struct {
-	prefix     string // manufacturer prefix in reply ("CS" or "3G")
-	needsReply bool
-}
-
-var replyRules = map[string]replyRule{
-	CmdLink:     {"CS", true},
-	CmdLocation: {"", false},
-	CmdBlind:    {"", false},
-	CmdAlarm:    {"3G", true},
-	CmdConfig:   {"CS", true},
+// needsReply lists commands that require a server acknowledgment.
+// Commands not in this set (UD, UD2, UD_WCDMA, UD_LTE) do not get a reply.
+var needsReply = map[string]bool{
+	CmdLink:   true,
+	CmdAlarm:  true,
+	CmdConfig: true,
 }
 
 // Sentinel errors.
@@ -112,10 +108,10 @@ func ParseFrame(raw string) (Frame, error) {
 }
 
 // BuildReply constructs the server acknowledgment string for a given command and device ID.
-// Returns "" for commands that need no reply (UD, UD2).
-func BuildReply(deviceID, cmd string) string {
-	rule, ok := replyRules[cmd]
-	if !ok || !rule.needsReply {
+// Returns "" for commands that need no reply (UD, UD2, UD_WCDMA, UD_LTE).
+// It uses the provided manufacturer prefix (from the original message) in the reply.
+func BuildReply(manufacturer, deviceID, cmd string) string {
+	if !needsReply[cmd] {
 		return ""
 	}
 
@@ -125,5 +121,5 @@ func BuildReply(deviceID, cmd string) string {
 	}
 
 	lenHex := fmt.Sprintf("%04X", len(content))
-	return fmt.Sprintf("[%s*%s*%s*%s]", rule.prefix, deviceID, lenHex, content)
+	return fmt.Sprintf("[%s*%s*%s*%s]", manufacturer, deviceID, lenHex, content)
 }

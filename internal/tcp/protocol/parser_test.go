@@ -164,25 +164,31 @@ func TestParseFrame(t *testing.T) {
 
 // TestBuildReply verifies reply strings for all Wonlex commands.
 func TestBuildReply(t *testing.T) {
-	const deviceID = "8800000015"
+	const (
+		deviceID = "8800000015"
+		manuf3G  = "3G"
+		manufXY  = "XY" // test dynamic prefix
+	)
 
 	tests := []struct {
-		cmd  string
-		want string
+		manuf string
+		cmd   string
+		want  string
 	}{
-		{CmdLink, "[CS*8800000015*0002*LK]"},
-		{CmdAlarm, "[3G*8800000015*0002*AL]"},
-		{CmdConfig, "[CS*8800000015*0008*CONFIG,1]"},
-		{CmdLocation, ""},  // no reply
-		{CmdBlind, ""},     // no reply
-		{"UNKNOWN", ""},    // unknown cmd → no reply
+		{manuf3G, CmdLink, "[3G*8800000015*0002*LK]"},
+		{manuf3G, CmdAlarm, "[3G*8800000015*0002*AL]"},
+		{manuf3G, CmdConfig, "[3G*8800000015*0008*CONFIG,1]"},
+		{manufXY, CmdLink, "[XY*8800000015*0002*LK]"},
+		{manuf3G, CmdLocation, ""}, // no reply
+		{manuf3G, CmdBlind, ""},    // no reply
+		{manuf3G, "UNKNOWN", ""},   // unknown cmd → no reply
 	}
 
 	for _, tc := range tests {
-		t.Run("BuildReply_"+tc.cmd, func(t *testing.T) {
-			got := BuildReply(deviceID, tc.cmd)
+		t.Run("BuildReply_"+tc.cmd+"_"+tc.manuf, func(t *testing.T) {
+			got := BuildReply(tc.manuf, deviceID, tc.cmd)
 			if got != tc.want {
-				t.Errorf("BuildReply(%q, %q) = %q, want %q", deviceID, tc.cmd, got, tc.want)
+				t.Errorf("BuildReply(%q, %q, %q) = %q, want %q", tc.manuf, deviceID, tc.cmd, got, tc.want)
 			}
 		})
 	}
