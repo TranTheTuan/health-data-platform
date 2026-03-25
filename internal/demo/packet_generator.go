@@ -10,8 +10,11 @@ import (
 
 // PersistableCommands lists packet types used for demo bursts.
 var PersistableCommands = []string{
-	protocol.CmdLocation, // UD
-	protocol.CmdAlarm,    // AL
+	protocol.CmdLocation,   // UD
+	protocol.CmdLocation3G, // UD_WCDMA
+	protocol.CmdLocation4G, // UD_LTE
+	protocol.CmdBlind,      // UD2
+	protocol.CmdAlarm,      // AL
 }
 
 // BuildWonlexFrame constructs a Wonlex frame: [3G*deviceID*LEN*CMD] or [3G*deviceID*LEN*CMD,payload]
@@ -37,7 +40,7 @@ func RandomFrame(deviceID string) string {
 
 func randomPayload(cmd string) string {
 	switch cmd {
-	case protocol.CmdLocation:
+	case protocol.CmdLocation, protocol.CmdLocation3G, protocol.CmdLocation4G, protocol.CmdBlind:
 		// Simplified UD location payload (Hanoi area)
 		ts := time.Now().UTC().Format("060102,150405")
 		lat := 21.0 + float64(rand.Intn(1000))/10000.0
